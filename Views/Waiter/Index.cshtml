@@ -1,0 +1,592 @@
+@model IEnumerable<RestaurantERP.Models.Category>
+@{
+    ViewData["Title"] = "Waiter POS";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var tables = ViewBag.Tables as List<RestaurantERP.Models.DiningTable> ?? new();
+    var settings = ViewBag.Settings as Dictionary<string, string> ?? new();
+    var taxRate = decimal.Parse(settings.GetValueOrDefault("TaxRate", "14"));
+    var orgName = settings.GetValueOrDefault("OrgName", "نادي دار الطائرات");
+    var orgNameEn = settings.GetValueOrDefault("OrgNameEn", "Aircraft Factory Club");
+    var preselectedTableId = Context.Request.Query["tableId"].ToString();
+}
+
+<style>
+.waiter-pos { display: grid; grid-template-columns: 1fr 380px; gap: 0; height: calc(100vh - 80px); overflow: hidden; margin: -24px; }
+.pos-left { display: flex; flex-direction: column; overflow: hidden; border-right: 1px solid var(--border-color); }
+.pos-right { display: flex; flex-direction: column; overflow: hidden; background: var(--card-bg); }
+.category-tabs { display: flex; gap: 8px; padding: 16px; overflow-x: auto; background: var(--card-bg); border-bottom: 1px solid var(--border-color); flex-shrink: 0; }
+.category-tabs::-webkit-scrollbar { height: 4px; }
+.cat-tab { padding: 8px 16px; border-radius: 20px; border: 2px solid var(--border-color); background: transparent; color: var(--text-muted); cursor: pointer; white-space: nowrap; font-size: 13px; font-weight: 600; transition: all 0.2s; font-family: inherit; }
+.cat-tab.active { color: white; border-color: transparent; }
+.products-grid { flex: 1; overflow-y: auto; padding: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; align-content: start; }
+.product-card { background: var(--card-bg); border: 2px solid var(--border-color); border-radius: 14px; padding: 14px; cursor: pointer; transition: all 0.2s; text-align: center; box-shadow: var(--shadow); }
+.product-card:hover { border-color: var(--primary); transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.1); }
+.product-card.out-of-stock { opacity: 0.4; cursor: not-allowed; }
+.product-icon { font-size: 28px; margin-bottom: 8px; }
+.product-name { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 2px; }
+.product-name-ar { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; direction: rtl; }
+.product-price { font-size: 15px; font-weight: 700; color: var(--primary); }
+.order-panel { display: flex; flex-direction: column; height: 100%; }
+.order-header { padding: 16px; border-bottom: 1px solid var(--border-color); flex-shrink: 0; }
+.table-selector { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.table-btn { padding: 6px 12px; border-radius: 8px; border: 2px solid var(--border-color); background: transparent; color: var(--text-muted); cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s; font-family: inherit; }
+.table-btn.selected { background: var(--primary); color: white; border-color: var(--primary); }
+.table-btn.occupied { border-color: #FF9800; color: #FF9800; }
+.cart-items { flex: 1; overflow-y: auto; padding: 12px; }
+.cart-item { display: flex; align-items: center; gap: 10px; padding: 10px; background: var(--bg-secondary); border-radius: 10px; margin-bottom: 8px; }
+.cart-item-name { flex: 1; font-size: 13px; font-weight: 600; }
+.cart-qty-controls { display: flex; align-items: center; gap: 6px; }
+.qty-btn { width: 26px; height: 26px; border-radius: 50%; border: none; background: var(--primary-light); color: var(--primary); cursor: pointer; font-size: 16px; font-weight: 700; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+.qty-btn:hover { background: var(--primary); color: white; }
+.qty-display { width: 28px; text-align: center; font-weight: 700; font-size: 14px; }
+.cart-item-price { font-size: 13px; font-weight: 600; color: var(--primary); min-width: 70px; text-align: right; }
+.order-totals { padding: 14px; border-top: 1px solid var(--border-color); flex-shrink: 0; background: var(--card-bg); }
+.total-row { display: flex; justify-content: space-between; font-size: 13px; color: var(--text-muted); margin-bottom: 6px; }
+.total-final { font-size: 20px; font-weight: 800; color: var(--primary); }
+.order-actions { padding: 12px 14px; border-top: 1px solid var(--border-color); flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; }
+.search-bar { padding: 10px 16px; border-bottom: 1px solid var(--border-color); flex-shrink: 0; }
+.search-bar input { width: 100%; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); font-size: 13px; font-family: inherit; }
+.order-type-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.ot-btn { flex: 1; padding: 8px; border-radius: 8px; border: 2px solid var(--border-color); background: transparent; color: var(--text-muted); cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s; font-family: inherit; }
+.ot-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+.empty-cart { text-align: center; padding: 40px 20px; color: var(--text-muted); }
+.item-note-input { width: 100%; font-size: 11px; padding: 3px 6px; border: 1px solid var(--border-color); border-radius: 5px; background: var(--bg-secondary); color: var(--text-primary); font-family: inherit; margin-top: 3px; }
+@@media (max-width: 900px) {
+    .waiter-pos { grid-template-columns: 1fr; height: auto; }
+    .pos-left { height: 55vh; }
+    .pos-right { height: 45vh; }
+}
+</style>
+
+<div class="waiter-pos">
+
+    <!-- LEFT: Products -->
+    <div class="pos-left">
+        <!-- Category Tabs -->
+        <div class="category-tabs">
+            <button class="cat-tab active" data-cat="0" onclick="loadProducts(0, this)"
+                    style="background:var(--primary);border-color:var(--primary);color:white" data-t="all">All</button>
+            @foreach (var cat in Model)
+            {
+                <button class="cat-tab" data-cat="@cat.Id" onclick="loadProducts(@cat.Id, this)"
+                        style="--cat-color:@cat.ColorHex">
+                    <i class="fas @cat.Icon me-1"></i>
+                    <span class="cat-name-en">@cat.Name</span>
+                    <span class="cat-name-ar" style="display:none" dir="rtl">@cat.NameAr</span>
+                </button>
+            }
+        </div>
+
+        <!-- Search -->
+        <div class="search-bar">
+            <input type="text" id="productSearch" placeholder="Search products..." data-placeholder-t="searchProducts"
+                   oninput="filterProducts(this.value)">
+        </div>
+
+        <!-- Products Grid -->
+        <div class="products-grid" id="productsGrid">
+            <div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--text-muted)">
+                <i class="fas fa-spinner fa-spin fa-2x"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- RIGHT: Order Panel -->
+    <div class="pos-right">
+        <div class="order-panel">
+
+            <!-- Order Header -->
+            <div class="order-header">
+                <div style="font-size:14px;font-weight:700;margin-bottom:10px;color:var(--text-primary)" data-t="orderDetails">
+                    <i class="fas fa-clipboard-list me-2" style="color:var(--primary)"></i>Order Details
+                </div>
+
+                <!-- Order Type -->
+                <div class="order-type-tabs">
+                    <button class="ot-btn active" data-type="DineIn" onclick="setOrderType('DineIn', this)">
+                        <i class="fas fa-utensils me-1"></i><span data-t="dineIn">Dine In</span>
+                    </button>
+                    <button class="ot-btn" data-type="Takeaway" onclick="setOrderType('Takeaway', this)">
+                        <i class="fas fa-shopping-bag me-1"></i><span data-t="takeaway">Takeaway</span>
+                    </button>
+                    <button class="ot-btn" data-type="Delivery" onclick="setOrderType('Delivery', this)">
+                        <i class="fas fa-motorcycle me-1"></i><span data-t="delivery">Delivery</span>
+                    </button>
+                </div>
+
+                <!-- Table Selector (Dine In only) -->
+                <div id="tableSelectorSection">
+                    <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px" data-t="selectTable">Select Table:</div>
+                    <div class="table-selector" id="tableSelector" style="max-height:90px;overflow-y:auto">
+                        @foreach (var t in tables.OrderBy(t => t.TableNumber))
+                        {
+                            var isOccupied = t.Status == RestaurantERP.Models.TableStatus.Occupied;
+                            <button class="table-btn @(isOccupied ? "occupied" : "")"
+                                    data-table-id="@t.Id" data-table-num="@t.TableNumber"
+                                    onclick="selectTable(@t.Id, @t.TableNumber, this)">
+                                @t.TableNumber@(isOccupied ? "●" : "")
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                <!-- Customer Name (Delivery) -->
+                <div id="customerSection" style="display:none">
+                    <input type="text" id="customerName" class="form-control" style="font-size:13px;padding:8px"
+                           data-placeholder-t="customerName" placeholder="Customer name...">
+                    <input type="text" id="customerPhone" class="form-control" style="font-size:13px;padding:8px;margin-top:6px"
+                           placeholder="Phone number...">
+                </div>
+
+                <!-- Order Notes -->
+                <textarea id="orderNotes" class="form-control" rows="1"
+                          style="font-size:12px;padding:6px;margin-top:8px;resize:none"
+                          data-placeholder-t="orderNotes" placeholder="Order notes..."></textarea>
+            </div>
+
+            <!-- Cart Items -->
+            <div class="cart-items" id="cartItems">
+                <div class="empty-cart">
+                    <i class="fas fa-shopping-cart fa-2x" style="margin-bottom:12px;opacity:0.3"></i>
+                    <div data-t="cartEmpty">Cart is empty</div>
+                    <div style="font-size:12px;margin-top:4px" data-t="clickProductToAdd">Click a product to add it</div>
+                </div>
+            </div>
+
+            <!-- Totals -->
+            <div class="order-totals" id="orderTotals" style="display:none">
+                <div class="total-row"><span data-t="subtotal">Subtotal</span><span id="totSubtotal">0.00 EGP</span></div>
+                <div class="total-row"><span>Tax (@taxRate%)</span><span id="totTax">0.00 EGP</span></div>
+                <div class="total-row" id="discountRow" style="display:none;color:var(--danger)">
+                    <span data-t="discount">Discount</span><span id="totDiscount">0.00 EGP</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding-top:10px;border-top:2px solid var(--border-color);margin-top:8px">
+                    <span style="font-weight:700" data-t="total">TOTAL</span>
+                    <span class="total-final" id="totFinal">0.00 EGP</span>
+                </div>
+                <!-- Quick discount input -->
+                <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+                    <label style="font-size:12px;color:var(--text-muted);white-space:nowrap" data-t="discount">Discount:</label>
+                    <input type="number" id="discountInput" min="0" step="0.5"
+                           style="width:70px;padding:4px 8px;border:1px solid var(--border-color);border-radius:6px;background:var(--bg-secondary);color:var(--text-primary);font-size:13px"
+                           placeholder="0" oninput="recalcTotals()">
+                    <span style="font-size:12px;color:var(--text-muted)">EGP</span>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="order-actions">
+                <!-- Payment Method -->
+                <div style="display:flex;gap:6px">
+                    <button class="btn btn-sm btn-outline payment-btn active-pay" data-pay="Cash" onclick="setPayment('Cash',this)"
+                            style="flex:1;font-size:12px;padding:8px">
+                        <i class="fas fa-money-bill me-1"></i><span data-t="cash">Cash</span>
+                    </button>
+                    <button class="btn btn-sm btn-outline payment-btn" data-pay="Card" onclick="setPayment('Card',this)"
+                            style="flex:1;font-size:12px;padding:8px">
+                        <i class="fas fa-credit-card me-1"></i><span data-t="card">Card</span>
+                    </button>
+                    <button class="btn btn-sm btn-outline payment-btn" data-pay="Digital" onclick="setPayment('Digital',this)"
+                            style="flex:1;font-size:12px;padding:8px">
+                        <i class="fas fa-mobile-alt me-1"></i><span data-t="digital">Digital</span>
+                    </button>
+                </div>
+
+                <!-- Place Order -->
+                <button class="btn btn-primary" id="placeOrderBtn" onclick="placeOrder()" style="padding:14px;font-size:15px;font-weight:700" disabled>
+                    <i class="fas fa-paper-plane me-2"></i><span data-t="placeOrder">Place Order</span>
+                </button>
+
+                <button class="btn btn-outline" onclick="clearCart()" style="font-size:13px;color:var(--danger);border-color:var(--danger)">
+                    <i class="fas fa-trash me-2"></i><span data-t="clearCart">Clear Cart</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Success Modal -->
+<div class="modal-overlay" id="successModal">
+    <div class="modal" style="max-width:420px;text-align:center">
+        <div class="modal-body" style="padding:40px 30px">
+            <div style="font-size:64px;color:#4CAF50;margin-bottom:16px"><i class="fas fa-check-circle"></i></div>
+            <h3 style="font-size:22px;font-weight:800;margin-bottom:8px" data-t="orderPlaced">Order Placed!</h3>
+            <div style="font-size:28px;font-weight:700;color:var(--primary);margin-bottom:6px" id="successOrderNum"></div>
+            <div style="color:var(--text-muted);margin-bottom:24px" id="successInfo"></div>
+            <div style="display:flex;gap:10px;justify-content:center">
+                <button class="btn btn-outline" onclick="printLastOrder()" style="flex:1">
+                    <i class="fas fa-print me-2"></i><span data-t="print">Print</span>
+                </button>
+                <button class="btn btn-primary" onclick="newOrder()" style="flex:1">
+                    <i class="fas fa-plus me-2"></i><span data-t="newOrder">New Order</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+const TAX_RATE = @taxRate / 100;
+const ORG_NAME = '@orgName';
+const ORG_NAME_EN = '@orgNameEn';
+const PRESELECTED_TABLE = '@preselectedTableId';
+
+let cart = [];
+let allProducts = [];
+let filteredProducts = [];
+let selectedTableId = null;
+let selectedTableNum = null;
+let orderType = 'DineIn';
+let paymentMethod = 'Cash';
+let lastOrderId = null;
+
+// ── Init ─────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+    loadProducts(0, document.querySelector('.cat-tab'));
+    if (PRESELECTED_TABLE) {
+        const btn = document.querySelector(`.table-btn[data-table-id="${PRESELECTED_TABLE}"]`);
+        if (btn) {
+            selectTable(parseInt(PRESELECTED_TABLE), parseInt(btn.dataset.tableNum), btn);
+        }
+    }
+    updateCatTabs();
+});
+
+function updateCatTabs() {
+    document.querySelectorAll('.cat-tab').forEach(btn => {
+        const color = btn.style.getPropertyValue('--cat-color') || 'var(--primary)';
+        btn.style.setProperty('--hover-color', color);
+    });
+}
+
+// ── Products ─────────────────────────────────────────────────────
+async function loadProducts(categoryId, btn) {
+    document.querySelectorAll('.cat-tab').forEach(b => {
+        b.style.background = 'transparent';
+        b.style.color = 'var(--text-muted)';
+        b.style.borderColor = 'var(--border-color)';
+    });
+    if (btn) {
+        const color = btn.style.getPropertyValue('--cat-color') || 'var(--primary)';
+        btn.style.background = color || 'var(--primary)';
+        btn.style.color = 'white';
+        btn.style.borderColor = color || 'var(--primary)';
+    }
+    document.getElementById('productSearch').value = '';
+    const data = await API.get(`/Waiter/GetProducts${categoryId ? '?categoryId=' + categoryId : ''}`);
+    allProducts = data;
+    filteredProducts = data;
+    renderProducts(data);
+}
+
+function filterProducts(search) {
+    const s = search.toLowerCase();
+    filteredProducts = s ? allProducts.filter(p =>
+        p.name.toLowerCase().includes(s) || (p.nameAr||'').includes(s)
+    ) : allProducts;
+    renderProducts(filteredProducts);
+}
+
+function renderProducts(products) {
+    const grid = document.getElementById('productsGrid');
+    if (!products.length) {
+        grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--text-muted)">
+            <i class="fas fa-search fa-2x" style="margin-bottom:12px;display:block"></i>No products found</div>`;
+        return;
+    }
+    grid.innerHTML = products.map(p => {
+        const outOfStock = p.trackStock && p.stockQuantity <= 0;
+        return `
+        <div class="product-card ${outOfStock ? 'out-of-stock' : ''}" onclick="${outOfStock ? '' : `addToCart(${p.id})`}">
+            <div class="product-icon" style="color:${p.categoryColor}">${p.categoryIcon ? `<i class="fas ${p.categoryIcon}"></i>` : '🍽'}</div>
+            <div class="product-name">${p.name}</div>
+            <div class="product-name-ar">${p.nameAr || ''}</div>
+            <div class="product-price">${p.price.toFixed(2)} EGP</div>
+            ${outOfStock ? `<div style="font-size:10px;color:var(--danger);margin-top:4px" data-t="outOfStock">Out of stock</div>` : ''}
+        </div>`;
+    }).join('');
+}
+
+// ── Cart ─────────────────────────────────────────────────────────
+function addToCart(productId) {
+    const product = allProducts.find(p => p.id === productId);
+    if (!product) return;
+    const existing = cart.find(c => c.productId === productId);
+    if (existing) {
+        existing.quantity++;
+    } else {
+        cart.push({ productId, name: product.name, nameAr: product.nameAr, price: product.price, quantity: 1, notes: '' });
+    }
+    renderCart();
+    updatePlaceOrderBtn();
+}
+
+function changeQty(productId, delta) {
+    const idx = cart.findIndex(c => c.productId === productId);
+    if (idx === -1) return;
+    cart[idx].quantity += delta;
+    if (cart[idx].quantity <= 0) cart.splice(idx, 1);
+    renderCart();
+    updatePlaceOrderBtn();
+}
+
+function updateItemNote(productId, note) {
+    const item = cart.find(c => c.productId === productId);
+    if (item) item.notes = note;
+}
+
+function renderCart() {
+    const container = document.getElementById('cartItems');
+    const totalsEl = document.getElementById('orderTotals');
+    if (!cart.length) {
+        container.innerHTML = `<div class="empty-cart">
+            <i class="fas fa-shopping-cart fa-2x" style="margin-bottom:12px;opacity:0.3"></i>
+            <div data-t="cartEmpty">Cart is empty</div>
+            <div style="font-size:12px;margin-top:4px" data-t="clickProductToAdd">Click a product to add it</div>
+        </div>`;
+        totalsEl.style.display = 'none';
+        return;
+    }
+    totalsEl.style.display = 'block';
+    container.innerHTML = cart.map(item => `
+        <div class="cart-item">
+            <div style="flex:1">
+                <div class="cart-item-name">${item.name}</div>
+                <div style="font-size:11px;color:var(--text-muted)" dir="rtl">${item.nameAr || ''}</div>
+                <input class="item-note-input" placeholder="Note..." value="${item.notes||''}"
+                       oninput="updateItemNote(${item.productId}, this.value)">
+            </div>
+            <div class="cart-qty-controls">
+                <button class="qty-btn" onclick="changeQty(${item.productId}, -1)">−</button>
+                <span class="qty-display">${item.quantity}</span>
+                <button class="qty-btn" onclick="changeQty(${item.productId}, 1)">+</button>
+            </div>
+            <div class="cart-item-price">${(item.price * item.quantity).toFixed(2)} EGP</div>
+        </div>`).join('');
+    recalcTotals();
+}
+
+function recalcTotals() {
+    const subtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+    const discount = parseFloat(document.getElementById('discountInput')?.value) || 0;
+    const taxable = subtotal - discount;
+    const tax = taxable * TAX_RATE;
+    const total = taxable + tax;
+    document.getElementById('totSubtotal').textContent = subtotal.toFixed(2) + ' EGP';
+    document.getElementById('totTax').textContent = tax.toFixed(2) + ' EGP';
+    document.getElementById('totFinal').textContent = total.toFixed(2) + ' EGP';
+    const discRow = document.getElementById('discountRow');
+    if (discount > 0) {
+        discRow.style.display = 'flex';
+        document.getElementById('totDiscount').textContent = '-' + discount.toFixed(2) + ' EGP';
+    } else {
+        discRow.style.display = 'none';
+    }
+}
+
+function clearCart() {
+    cart = [];
+    document.getElementById('discountInput').value = '';
+    renderCart();
+    updatePlaceOrderBtn();
+}
+
+// ── Order Config ─────────────────────────────────────────────────
+function selectTable(tableId, tableNum, btn) {
+    selectedTableId = tableId;
+    selectedTableNum = tableNum;
+    document.querySelectorAll('.table-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    updatePlaceOrderBtn();
+}
+
+function setOrderType(type, btn) {
+    orderType = type;
+    document.querySelectorAll('.ot-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const tableSection = document.getElementById('tableSelectorSection');
+    const customerSection = document.getElementById('customerSection');
+    tableSection.style.display = type === 'DineIn' ? '' : 'none';
+    customerSection.style.display = type === 'Delivery' ? '' : 'none';
+    if (type !== 'DineIn') { selectedTableId = null; selectedTableNum = null; document.querySelectorAll('.table-btn').forEach(b => b.classList.remove('selected')); }
+    updatePlaceOrderBtn();
+}
+
+function setPayment(method, btn) {
+    paymentMethod = method;
+    document.querySelectorAll('.payment-btn').forEach(b => {
+        b.style.background = 'transparent';
+        b.style.color = '';
+        b.style.borderColor = 'var(--border-color)';
+    });
+    btn.style.background = 'var(--primary)';
+    btn.style.color = 'white';
+    btn.style.borderColor = 'var(--primary)';
+}
+
+function updatePlaceOrderBtn() {
+    const btn = document.getElementById('placeOrderBtn');
+    const hasItems = cart.length > 0;
+    const hasTable = orderType !== 'DineIn' || selectedTableId !== null;
+    btn.disabled = !(hasItems && hasTable);
+}
+
+// ── Place Order ───────────────────────────────────────────────────
+async function placeOrder() {
+    if (!cart.length) {
+        Toast.warning('Cart is empty');
+        return;
+    }
+
+    if (orderType === 'DineIn' && !selectedTableId) {
+        Toast.warning('Please select a table');
+        return;
+    }
+
+    const btn = document.getElementById('placeOrderBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Placing Order...';
+
+    const discount = parseFloat(document.getElementById('discountInput')?.value) || 0;
+    const subtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+    const taxable = Math.max(subtotal - discount, 0);
+    const total = taxable + taxable * TAX_RATE;
+
+    const payload = {
+        items: cart.map(i => ({
+            productId: i.productId,
+            quantity: i.quantity,
+            notes: i.notes || null
+        })),
+
+        tableId: orderType === 'DineIn' ? selectedTableId : null,
+
+        orderType: orderType === 'DineIn'
+            ? 0
+            : orderType === 'Takeaway'
+                ? 1
+                : 2,
+
+        customerName: document.getElementById('customerName')?.value || null,
+        customerPhone: document.getElementById('customerPhone')?.value || null,
+        notes: document.getElementById('orderNotes')?.value || null,
+
+        discountAmount: discount,
+        amountPaid: total,
+
+        paymentMethod: paymentMethod === 'Cash'
+            ? 0
+            : paymentMethod === 'Card'
+                ? 1
+                : 2
+    };
+
+    console.log('ORDER PAYLOAD:', payload);
+
+    try {
+        const response = await fetch('/Waiter/PlaceOrder', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const text = await response.text();
+
+        console.log('RAW SERVER RESPONSE:', text);
+
+        let res;
+
+        try {
+            res = JSON.parse(text);
+        } catch (jsonError) {
+            console.error('Server did not return JSON:', text);
+            Toast.error('Server returned an error page. Check Console for details.');
+            return;
+        }
+
+        console.log('ORDER RESPONSE:', res);
+
+        if (!response.ok) {
+            Toast.error(res.message || res.details || 'Server error while placing order');
+            return;
+        }
+
+        if (res.success) {
+            lastOrderId = res.orderId;
+
+            document.getElementById('successOrderNum').textContent =
+                '#' + (res.orderNumber || res.orderId);
+
+            const totalValue = Number(res.total || total || 0);
+
+            document.getElementById('successInfo').textContent =
+                (orderType === 'DineIn' ? `Table ${selectedTableNum}  ·  ` : '')
+                + totalValue.toFixed(2) + ' EGP';
+
+            Modal.open('successModal');
+            clearCart();
+        } else {
+            Toast.error(res.message || res.details || 'Failed to place order');
+        }
+
+    } catch (e) {
+        console.error('FULL ERROR:', e);
+        Toast.error(e.message || 'Error placing order');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-paper-plane me-2"></i><span data-t="placeOrder">Place Order</span>';
+    }
+}
+
+async function printLastOrder() {
+    if (!lastOrderId) return;
+    try {
+        const data = await API.get(`/Waiter/GetOrderForPrint?orderId=${lastOrderId}`);
+        if (data.success) {
+            const o = data;
+            const itemsHtml = (o.items||[]).map(i =>
+                `<tr><td>${i.productName}</td><td style="text-align:center">${i.quantity}</td><td style="text-align:right">${(i.unitPrice*i.quantity).toFixed(2)}</td></tr>`
+            ).join('');
+            const html = `
+                <div style="font-family:'Cairo',sans-serif;max-width:300px;margin:0 auto;padding:10px">
+                    <div style="text-align:center;border-bottom:2px dashed #333;padding-bottom:10px;margin-bottom:10px">
+                        <h2 style="margin:0;font-size:18px">${ORG_NAME}</h2>
+                        <p style="margin:4px 0;font-size:12px">${ORG_NAME_EN}</p>
+                    </div>
+                    <div style="font-size:12px;margin-bottom:10px">
+                        <div>Order: <strong>${o.orderNumber}</strong></div>
+                        ${o.tableNumber ? `<div>Table: ${o.tableNumber}</div>` : ''}
+                        <div>Waiter: ${o.waiterName || '-'}</div>
+                        <div>Date: ${new Date().toLocaleString('ar-EG')}</div>
+                    </div>
+                    <table style="width:100%;font-size:12px;border-top:1px dashed #333;border-bottom:1px dashed #333">
+                        <thead><tr><th style="text-align:left;padding:4px">Item</th><th>Qty</th><th style="text-align:right;padding:4px">EGP</th></tr></thead>
+                        <tbody>${itemsHtml}</tbody>
+                    </table>
+                    <div style="font-size:12px;margin-top:10px">
+                        <div style="display:flex;justify-content:space-between"><span>Subtotal:</span><span>${o.subTotal?.toFixed(2)}</span></div>
+                        <div style="display:flex;justify-content:space-between"><span>Tax (${o.taxRate}%):</span><span>${o.taxAmount?.toFixed(2)}</span></div>
+                        ${o.discountAmount>0?`<div style="display:flex;justify-content:space-between"><span>Discount:</span><span>-${o.discountAmount?.toFixed(2)}</span></div>`:''}
+                        <div style="display:flex;justify-content:space-between;font-weight:bold;font-size:14px;border-top:1px dashed #333;margin-top:6px;padding-top:6px">
+                            <span>TOTAL:</span><span>${o.total?.toFixed(2)} EGP</span>
+                        </div>
+                    </div>
+                    <div style="text-align:center;margin-top:16px;font-size:11px;border-top:1px dashed #333;padding-top:10px">
+                        <p style="margin:0">شكراً لزيارتكم</p>
+                        <p style="margin:0">Thank you for your visit!</p>
+                    </div>
+                </div>`;
+            printInvoice(html);
+        }
+    } catch(e) { Toast.error('Failed to load order for print'); }
+}
+
+function newOrder() {
+    Modal.close('successModal');
+    document.getElementById('orderNotes').value = '';
+}
+</script>
+}

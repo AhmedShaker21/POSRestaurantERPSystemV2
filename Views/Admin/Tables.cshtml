@@ -1,0 +1,377 @@
+@model IEnumerable<RestaurantERP.Models.DiningTable>
+@{
+    ViewData["Title"] = "الطاولات";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var branches         = ViewBag.Branches as List<RestaurantERP.Models.Branch> ?? new();
+    var selectedBranchId = ViewBag.BranchId as int?;
+    var selectedBranch   = branches.FirstOrDefault(b => b.Id == selectedBranchId);
+}
+
+@* ── Branch filter bar ─────────────────────────────────────────── *@
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;
+            padding:12px 16px;background:var(--card-bg);border:1px solid var(--border-color);
+            border-radius:14px;box-shadow:var(--shadow)">
+    <div style="font-size:12px;font-weight:700;color:var(--text-muted);white-space:nowrap">
+        <i class="fas fa-code-branch me-1" style="color:var(--primary)"></i> طاولات الفرع:
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;flex:1">
+        <a href="/Admin/Tables"
+           style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;text-decoration:none;
+                  border:2px solid @(selectedBranchId==null?"var(--primary)":"var(--border-color)");
+                  background:@(selectedBranchId==null?"var(--primary)":"transparent");
+                  color:@(selectedBranchId==null?"#fff":"var(--text-muted)")">
+            🌐 كل الفروع
+        </a>
+        @foreach (var b in branches)
+        {
+            var isSel = selectedBranchId == b.Id;
+            <a href="/Admin/Tables?branchId=@b.Id"
+               style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;text-decoration:none;
+                      display:flex;align-items:center;gap:4px;
+                      border:2px solid @(isSel?b.ColorHex:"var(--border-color)");
+                      background:@(isSel?b.ColorHex:"transparent");
+                      color:@(isSel?"#fff":"var(--text-muted)")">
+                @b.Icon @b.NameAr
+            </a>
+        }
+    </div>
+    @if (selectedBranch != null)
+    {
+        <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:12px;
+                     background:@(selectedBranch.ColorHex)18;color:@selectedBranch.ColorHex;
+                     border:1px solid @(selectedBranch.ColorHex)44">
+            @selectedBranch.Icon @selectedBranch.NameAr
+        </span>
+    }
+</div>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">الطاولات</h1>
+        <p class="page-subtitle">
+            @Model.Count() طاولة
+            @if (selectedBranch != null) { <span style="color:@selectedBranch.ColorHex;font-weight:700"> — @selectedBranch.NameAr</span> }
+        </p>
+    </div>
+    <button class="btn btn-primary" onclick="openAddTableModal()">
+        <i class="fas fa-plus me-2"></i>إضافة طاولة
+    </button>
+</div>
+
+<!-- إحصاءات الحالات -->
+<div class="d-flex gap-3 flex-wrap" style="margin-bottom:24px ; margin-top:24px">
+    @{
+        var statusInfo = new[] {
+            ("Available", "#4CAF50", "fa-check-circle", "متاحة"),
+            ("Occupied",  "#FF9800", "fa-user-friends",  "مشغولة"),
+            ("Reserved",  "#45B7D1", "fa-calendar-check","محجوزة"),
+            ("Cleaning",  "#9E9E9E", "fa-broom",         "تنظيف")
+        };
+    }
+    @foreach (var (name, color, icon, labelAr) in statusInfo)
+    {
+        var count = Model.Count(t => t.Status.ToString() == name);
+        <div class="card" style="padding:16px 24px;border-left:4px solid @color;min-width:140px;flex:1">
+            <div class="d-flex align-items-center gap-3">
+                <i class="fas @icon" style="color:@color;font-size:22px"></i>
+                <div>
+                    <div style="font-size:22px;font-weight:700">@count</div>
+                    <div style="color:var(--text-muted);font-size:13px">@labelAr</div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@* ── Group tables by branch ─────────────────────────────────────── *@
+@{
+    var tablesByBranch = Model
+        .GroupBy(t => t.Branch)
+        .OrderBy(g => g.Key?.Name ?? "")
+        .ToList();
+}
+
+@foreach (var group in tablesByBranch)
+{
+    var br = group.Key;
+    @if (br != null && selectedBranchId == null && tablesByBranch.Count > 1)
+    {
+        <div style="display:flex;align-items:center;gap:10px;margin:20px 0 12px;
+                    padding:10px 16px;border-radius:12px;
+                    background:@(br.ColorHex)12;border:1px solid @(br.ColorHex)33">
+            <span style="font-size:22px">@br.Icon</span>
+            <span style="font-weight:800;font-size:15px;color:@br.ColorHex">@br.NameAr</span>
+            <span style="font-size:11px;color:var(--text-muted)">@br.Name</span>
+            <span style="margin-right:auto;font-size:12px;font-weight:700;
+                         background:@(br.ColorHex)22;color:@br.ColorHex;
+                         padding:2px 10px;border-radius:12px">
+                @group.Count() طاولة
+            </span>
+        </div>
+    }
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;margin-bottom:@(tablesByBranch.Count > 1 ? "8px" : "0")">
+        @foreach (var table in group.OrderBy(t => t.TableNumber))
+        {
+            var result = table.Status switch {
+                RestaurantERP.Models.TableStatus.Available => ("#4CAF50", "fa-check-circle", "متاحة"),
+                RestaurantERP.Models.TableStatus.Occupied  => ("#FF9800", "fa-user-friends",  "مشغولة"),
+                RestaurantERP.Models.TableStatus.Reserved  => ("#45B7D1", "fa-calendar-check","محجوزة"),
+                RestaurantERP.Models.TableStatus.Cleaning  => ("#9E9E9E", "fa-broom",         "تنظيف"),
+                _                                          => ("#aaa",    "fa-circle",         table.Status.ToString())
+            };
+            var statusColor  = result.Item1;
+            var statusIcon   = result.Item2;
+            var statusLabelAr= result.Item3;
+
+            <div class="card" style="padding:20px;text-align:center;border-top:4px solid @statusColor;
+                                     cursor:pointer;transition:transform .2s"
+                 onmouseover="this.style.transform='translateY(-4px)'"
+                 onmouseout="this.style.transform=''"
+                 onclick="showTableDetails(@table.Id)">
+                <div style="font-size:40px;font-weight:800;color:@statusColor;line-height:1">@table.TableNumber</div>
+                <div style="font-size:11px;color:var(--text-muted);margin:4px 0 8px">طاولة</div>
+                <div style="margin-bottom:8px">
+                    <span class="badge" style="background:@(statusColor)22;color:@statusColor">
+                        <i class="fas @statusIcon me-1" style="font-size:10px"></i>@statusLabelAr
+                    </span>
+                </div>
+                <div style="font-size:12px;color:var(--text-muted)">
+                    <i class="fas fa-users me-1"></i>@table.Capacity مقعد
+                </div>
+                @if (!string.IsNullOrEmpty(table.Section))
+                {
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px">@table.Section</div>
+                }
+                @if (br != null && selectedBranchId == null && tablesByBranch.Count > 1)
+                {
+                    <div style="margin-top:6px;font-size:10px;font-weight:700;
+                                background:@(br.ColorHex)18;color:@br.ColorHex;
+                                padding:2px 8px;border-radius:10px;display:inline-block">
+                        @br.Icon @br.NameAr
+                    </div>
+                }
+                <div style="margin-top:10px;display:flex;gap:6px;justify-content:center"
+                     onclick="event.stopPropagation()">
+                    <button class="btn btn-outline btn-sm" style="font-size:10px;padding:3px 8px"
+                            onclick="openEditTableModal(@table.Id,@table.TableNumber,@table.Capacity,'@(table.Section??"")')">
+                        ✏️ تعديل
+                    </button>
+                    <button class="btn btn-danger btn-sm" style="font-size:10px;padding:3px 8px"
+                            onclick="deleteTable(@table.Id, @table.TableNumber)">
+                        🗑️ حذف
+                    </button>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@if (!Model.Any())
+{
+    <div style="text-align:center;padding:60px;color:var(--text-muted)">
+        <div style="font-size:48px;margin-bottom:12px">🪑</div>
+        <p>لا توجد طاولات@(selectedBranch != null ? $" في {selectedBranch.NameAr}" : "")</p>
+    </div>
+}
+
+<!-- مودال تفاصيل الطاولة -->
+<div class="modal-overlay" id="tableModal">
+    <div class="modal" style="max-width:420px">
+        <div class="modal-header">
+            <h3 class="modal-title" id="tableModalTitle">تفاصيل الطاولة</h3>
+            <button class="modal-close" onclick="Modal.close('tableModal')">&times;</button>
+        </div>
+        <div class="modal-body" id="tableModalBody"></div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="Modal.close('tableModal')">إغلاق</button>
+            <button class="btn btn-primary" onclick="updateTableStatus()" id="updateStatusBtn">
+                <i class="fas fa-sync me-2"></i>تحديث الحالة
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- مودال إضافة / تعديل طاولة -->
+<div class="modal-overlay" id="tableFormModal">
+    <div class="modal" style="max-width:440px">
+        <div class="modal-header">
+            <h3 class="modal-title" id="tableFormTitle">
+                <i class="fas fa-plus-circle me-2" style="color:var(--primary)"></i>إضافة طاولة
+            </h3>
+            <button class="modal-close" onclick="Modal.close('tableFormModal')">&times;</button>
+        </div>
+        <div class="modal-body" style="padding:24px">
+            <input type="hidden" id="formTableId" value="0">
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+                <div class="form-group">
+                    <label class="form-label">رقم الطاولة <span style="color:var(--danger)">*</span></label>
+                    <input type="number" id="formTableNumber" class="form-control" min="1" placeholder="مثال: 5">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">عدد المقاعد <span style="color:var(--danger)">*</span></label>
+                    <input type="number" id="formTableCapacity" class="form-control" min="1" value="4" placeholder="4">
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom:16px">
+                <label class="form-label">القسم (اختياري)</label>
+                <input type="text" id="formTableSection" class="form-control"
+                       placeholder="مثال: VIP، صالة خارجية..." dir="rtl">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">الفرع <span style="color:var(--danger)">*</span></label>
+                <select id="formTableBranch" class="form-control">
+                    @foreach (var b in branches)
+                    {
+                        var isSel = selectedBranchId == b.Id;
+                        <option value="@b.Id" selected="@isSel">@b.Icon @b.NameAr</option>
+                    }
+                </select>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="Modal.close('tableFormModal')">إلغاء</button>
+            <button class="btn btn-primary" id="saveTableBtn" onclick="submitTableForm()">
+                <i class="fas fa-save me-2"></i>حفظ الطاولة
+            </button>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+const tablesData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Select(t => new {
+    id = t.Id,
+    tableNumber = t.TableNumber,
+    capacity    = t.Capacity,
+    status      = t.Status.ToString(),
+    section     = t.Section,
+    branchName  = t.Branch?.NameAr ?? t.Branch?.Name ?? ""
+})));
+
+const statusLabels = { Available:'متاحة', Occupied:'مشغولة', Reserved:'محجوزة', Cleaning:'تنظيف' };
+const statusColors = { Available:'#4CAF50', Occupied:'#FF9800', Reserved:'#45B7D1', Cleaning:'#9E9E9E' };
+
+let selectedTableId = null;
+
+function showTableDetails(id) {
+    const table = tablesData.find(t => t.id === id);
+    if (!table) return;
+    selectedTableId = id;
+    const color = statusColors[table.status] || '#aaa';
+    document.getElementById('tableModalTitle').textContent = 'طاولة ' + table.tableNumber;
+    document.getElementById('tableModalBody').innerHTML = `
+        <div style="text-align:center;margin-bottom:20px">
+            <div style="font-size:64px;font-weight:800;color:${color};line-height:1">${table.tableNumber}</div>
+            <span class="badge" style="background:${color}22;color:${color};font-size:13px;padding:6px 16px;margin-top:8px;display:inline-block">
+                ${statusLabels[table.status] || table.status}
+            </span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+            <div style="padding:12px;background:var(--bg-secondary);border-radius:8px;text-align:center">
+                <div style="font-size:22px;font-weight:700">${table.capacity}</div>
+                <div style="font-size:12px;color:var(--text-muted)">عدد المقاعد</div>
+            </div>
+            <div style="padding:12px;background:var(--bg-secondary);border-radius:8px;text-align:center">
+                <div style="font-size:14px;font-weight:600">${table.section || '—'}</div>
+                <div style="font-size:12px;color:var(--text-muted)">القسم</div>
+            </div>
+        </div>
+        ${table.branchName ? `<div style="margin-bottom:14px;padding:8px 12px;background:var(--bg-secondary);border-radius:8px;font-size:13px;font-weight:700"><i class="fas fa-code-branch me-2" style="color:var(--primary)"></i>${table.branchName}</div>` : ''}
+        <div class="form-group">
+            <label class="form-label">تغيير الحالة</label>
+            <select id="newTableStatus" class="form-control">
+                <option value="Available" ${table.status==='Available'?'selected':''}>✅ متاحة</option>
+                <option value="Occupied"  ${table.status==='Occupied' ?'selected':''}>🔴 مشغولة</option>
+                <option value="Reserved"  ${table.status==='Reserved' ?'selected':''}>📅 محجوزة</option>
+                <option value="Cleaning"  ${table.status==='Cleaning' ?'selected':''}>🧹 تنظيف</option>
+            </select>
+        </div>
+    `;
+    Modal.open('tableModal');
+}
+
+async function updateTableStatus() {
+    if (!selectedTableId) return;
+    const status = document.getElementById('newTableStatus').value;
+    try {
+        const res = await API.post('/Admin/UpdateTableStatus', { tableId: selectedTableId, status });
+        if (res.success) { Toast.success('تم تحديث حالة الطاولة'); setTimeout(() => location.reload(), 600); }
+        else Toast.error(res.message || 'فشل التحديث');
+    } catch(e) { Toast.error('حدث خطأ'); }
+}
+
+// ── Add Table ─────────────────────────────────────────────────
+function openAddTableModal() {
+    document.getElementById('formTableId').value       = 0;
+    document.getElementById('formTableNumber').value  = '';
+    document.getElementById('formTableCapacity').value = 4;
+    document.getElementById('formTableSection').value  = '';
+    document.getElementById('tableFormTitle').innerHTML = '<i class="fas fa-plus-circle me-2" style="color:var(--primary)"></i>إضافة طاولة جديدة';
+    document.getElementById('saveTableBtn').innerHTML  = '<i class="fas fa-save me-2"></i>إضافة الطاولة';
+    Modal.open('tableFormModal');
+}
+
+function openEditTableModal(id, tableNumber, capacity, section) {
+    document.getElementById('formTableId').value        = id;
+    document.getElementById('formTableNumber').value   = tableNumber;
+    document.getElementById('formTableCapacity').value  = capacity;
+    document.getElementById('formTableSection').value   = section;
+    document.getElementById('tableFormTitle').innerHTML = '<i class="fas fa-pen-to-square me-2" style="color:var(--primary)"></i>تعديل الطاولة';
+    document.getElementById('saveTableBtn').innerHTML   = '<i class="fas fa-save me-2"></i>حفظ التغييرات';
+    Modal.open('tableFormModal');
+}
+
+async function submitTableForm() {
+    const id       = parseInt(document.getElementById('formTableId').value) || 0;
+    const number   = parseInt(document.getElementById('formTableNumber').value);
+    const capacity = parseInt(document.getElementById('formTableCapacity').value) || 4;
+    const section  = document.getElementById('formTableSection').value.trim();
+    const branchId = parseInt(document.getElementById('formTableBranch').value);
+
+    if (!number || number < 1) { Toast.error('يرجى إدخال رقم طاولة صحيح'); return; }
+    if (!branchId)              { Toast.error('يرجى اختيار الفرع');          return; }
+
+    const btn = document.getElementById('saveTableBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>جاري الحفظ...';
+
+    try {
+        const res = await API.post('/Admin/SaveTable', {
+            id,
+            tableNumber: number,
+            capacity,
+            section:    section || null,
+            branchId,
+            status:     'Available'
+        });
+        if (res.success) {
+            Toast.success(id > 0 ? 'تم تعديل الطاولة ✅' : 'تم إضافة الطاولة ✅');
+            Modal.close('tableFormModal');
+            setTimeout(() => location.reload(), 600);
+        } else {
+            Toast.error(res.message || 'فشل الحفظ');
+        }
+    } catch(e) { Toast.error('حدث خطأ'); }
+
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-save me-2"></i>حفظ الطاولة';
+}
+
+async function deleteTable(id, tableNumber) {
+    if (!confirm(`⚠️ هل أنت متأكد من حذف طاولة رقم ${tableNumber}؟\n\nسيتم حذفها نهائياً.`)) return;
+    try {
+        const res = await API.post('/Admin/DeleteTable', { id });
+        if (res.success) {
+            Toast.success(`تم حذف الطاولة ${tableNumber} ✅`);
+            setTimeout(() => location.reload(), 600);
+        } else {
+            Toast.error(res.message || 'لا يمكن حذف هذه الطاولة');
+        }
+    } catch(e) { Toast.error('حدث خطأ'); }
+}
+</script>
+}

@@ -1,0 +1,167 @@
+@model IEnumerable<RestaurantERP.Models.Order>
+@{
+    ViewData["Title"] = "My Orders";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title" data-t="myOrders">My Orders</h1>
+        <p class="page-subtitle">@Model.Count() <span data-t="ordersFor">orders for</span> @ViewBag.Date</p>
+    </div>
+    <div class="d-flex gap-2 align-items-center">
+        <input type="date" class="form-control" value="@ViewBag.Date" style="max-width:180px"
+               onchange="window.location.href='/Waiter/MyOrders?date='+this.value">
+        <a href="/Waiter" class="btn btn-primary">
+            <i class="fas fa-plus me-2"></i><span data-t="newOrder">New Order</span>
+        </a>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="stats-grid" style="margin-bottom:24px">
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#45B7D122;color:#45B7D1"><i class="fas fa-receipt"></i></div>
+        <div class="stat-value">@Model.Count()</div>
+        <div class="stat-label" data-t="totalOrders">Total Orders</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#4CAF5022;color:#4CAF50"><i class="fas fa-check-circle"></i></div>
+        <div class="stat-value">@Model.Count(o => o.Status == RestaurantERP.Models.OrderStatus.Completed)</div>
+        <div class="stat-label" data-t="completed">Completed</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#FF980022;color:#FF9800"><i class="fas fa-clock"></i></div>
+        <div class="stat-value">@Model.Count(o => o.Status == RestaurantERP.Models.OrderStatus.Pending || o.Status == RestaurantERP.Models.OrderStatus.Preparing)</div>
+        <div class="stat-label" data-t="inProgress">In Progress</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#FF6B6B22;color:#FF6B6B"><i class="fas fa-coins"></i></div>
+        <div class="stat-value">@ViewBag.TotalSales.ToString("F0") EGP</div>
+        <div class="stat-label" data-t="totalSales">Total Sales</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <div class="d-flex gap-3 align-items-center flex-wrap">
+            <input type="text" class="form-control" style="max-width:220px" placeholder="Search..." oninput="filterOrders(this.value)">
+            <select id="statusFilter" class="form-control" style="max-width:160px" onchange="filterOrders('')">
+                <option value="">All Status</option>
+                <option>Pending</option>
+                <option>Preparing</option>
+                <option>Ready</option>
+                <option>Completed</option>
+                <option>Cancelled</option>
+            </select>
+        </div>
+    </div>
+    <div class="table-container">
+        <table class="data-table" id="ordersTable">
+            <thead>
+                <tr>
+                    <th data-t="orderNo">Order #</th>
+                    <th data-t="table">Table</th>
+                    <th data-t="type">Type</th>
+                    <th data-t="items">Items</th>
+                    <th data-t="total">Total</th>
+                    <th data-t="payment">Payment</th>
+                    <th data-t="status">Status</th>
+                    <th data-t="time">Time</th>
+                    <th data-t="actions">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var o in Model.OrderByDescending(x => x.CreatedAt))
+                {
+                    <tr data-status="@o.Status">
+                        <td><strong>@o.OrderNumber</strong></td>
+                        <td>
+                            @if (o.Table != null)
+                            {
+                                <span class="badge badge-primary">Table @o.Table.TableNumber</span>
+                            }
+                            else
+                            {
+                                <span style="color:var(--text-muted)">—</span>
+                            }
+                        </td>
+                        <td>
+                            <span class="badge @(o.OrderType == RestaurantERP.Models.OrderType.DineIn ? "badge-primary" : o.OrderType == RestaurantERP.Models.OrderType.Takeaway ? "badge-warning" : "badge-info")">
+                                @o.OrderType
+                            </span>
+                        </td>
+                        <td>@(o.Items?.Count ?? 0)</td>
+                        <td><strong>@o.Total.ToString("F2") EGP</strong></td>
+                        <td style="font-size:12px">@o.PaymentMethod</td>
+                        <td>
+                            <span class="badge @(o.Status == RestaurantERP.Models.OrderStatus.Completed ? "badge-success" : o.Status == RestaurantERP.Models.OrderStatus.Cancelled ? "badge-danger" : o.Status == RestaurantERP.Models.OrderStatus.Ready ? "badge-success" : "badge-warning")">
+                                @o.Status
+                            </span>
+                        </td>
+                        <td style="font-size:12px">@o.CreatedAt.ToString("hh:mm tt")</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline" onclick="reprintOrder(@o.Id)" title="Reprint">
+                                <i class="fas fa-print"></i>
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function filterOrders(search) {
+            const s = (search || document.querySelector('input[type=text]').value).toLowerCase();
+            const status = document.getElementById('statusFilter').value;
+            document.querySelectorAll('#ordersTable tbody tr').forEach(row => {
+                const show = (!s || row.textContent.toLowerCase().includes(s)) &&
+                             (!status || row.dataset.status === status);
+                row.style.display = show ? '' : 'none';
+            });
+        }
+
+        async function reprintOrder(orderId) {
+            try {
+                const data = await API.get(`/Waiter/GetOrderForPrint?orderId=${orderId}`);
+                if (data.success) {
+                    const o = data;
+                    const itemsHtml = (o.items||[]).map(i =>
+                        `<tr><td>${i.productName}</td><td style="text-align:center">${i.quantity}</td><td style="text-align:right">${(i.unitPrice*i.quantity).toFixed(2)}</td></tr>`
+                    ).join('');
+                    const html = `
+                        <div style="font-family:'Cairo',sans-serif;max-width:300px;margin:0 auto;padding:10px">
+                            <div style="text-align:center;border-bottom:2px dashed #333;padding-bottom:10px;margin-bottom:10px">
+                                <h2 style="margin:0;font-size:18px">نادي دار الطائرات</h2>
+                                <p style="margin:4px 0;font-size:12px">Aircraft Factory Club</p>
+                            </div>
+                            <div style="font-size:12px;margin-bottom:10px">
+                                <div>Order: <strong>${o.orderNumber}</strong></div>
+                                ${o.tableNumber ? `<div>Table: ${o.tableNumber}</div>` : ''}
+                                <div>Date: ${new Date(o.createdAt).toLocaleString('ar-EG')}</div>
+                                <div>Waiter: ${o.waiterName || '-'}</div>
+                            </div>
+                            <table style="width:100%;font-size:12px;border-top:1px dashed #333;border-bottom:1px dashed #333">
+                                <thead><tr><th style="text-align:left;padding:4px">Item</th><th>Qty</th><th style="text-align:right;padding:4px">EGP</th></tr></thead>
+                                <tbody>${itemsHtml}</tbody>
+                            </table>
+                            <div style="font-size:12px;margin-top:10px">
+                                <div style="display:flex;justify-content:space-between"><span>Subtotal:</span><span>${o.subTotal?.toFixed(2)}</span></div>
+                                <div style="display:flex;justify-content:space-between"><span>Tax:</span><span>${o.taxAmount?.toFixed(2)}</span></div>
+                                <div style="display:flex;justify-content:space-between;font-weight:bold;font-size:14px;border-top:1px dashed #333;margin-top:6px;padding-top:6px">
+                                    <span>TOTAL:</span><span>${o.total?.toFixed(2)} EGP</span>
+                                </div>
+                            </div>
+                            <div style="text-align:center;margin-top:16px;font-size:11px;border-top:1px dashed #333;padding-top:10px">
+                                <p style="margin:0">شكراً لزيارتكم — Thank you!</p>
+                            </div>
+                        </div>`;
+                    printInvoice(html);
+                }
+            } catch(e) { Toast.error('Failed to load order'); }
+        }
+    </script>
+}

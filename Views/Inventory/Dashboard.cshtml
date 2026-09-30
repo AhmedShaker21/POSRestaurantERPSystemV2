@@ -1,0 +1,546 @@
+@model IEnumerable<RestaurantERP.Models.Product>
+@{
+    ViewData["Title"] = "لوحة المخزن";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.PageTitle = "لوحة تحكم المخزن";
+    var branches = ViewBag.Branches as List<RestaurantERP.Models.Branch> ?? new();
+    var isAdmin = (bool)(ViewBag.IsAdmin ?? false);
+    var recentOut = ViewBag.RecentOut as List<RestaurantERP.Models.InventoryLog> ?? new();
+    var recentIn  = ViewBag.RecentIn  as List<RestaurantERP.Models.InventoryLog> ?? new();
+    var atBranches = ViewBag.AtBranches as List<RestaurantERP.Controllers.BranchStockRow> ?? new();
+
+    string TypeAr(RestaurantERP.Models.InventoryLogType t) => t switch
+    {
+        RestaurantERP.Models.InventoryLogType.Supply => "وارد",
+        RestaurantERP.Models.InventoryLogType.Distribution => "توزيع لفرع",
+        RestaurantERP.Models.InventoryLogType.NewProduct => "رصيد افتتاحي",
+        RestaurantERP.Models.InventoryLogType.Waste => "هالك",
+        RestaurantERP.Models.InventoryLogType.ReturnToWarehouse => "مرتجع للمخزن",
+        _ => "تسوية"
+    };
+    string N(decimal d) => d.ToString("0.###");
+    string M(decimal d) => d.ToString("N2");
+}
+
+<div class="page-header no-print">
+    <div>
+        <h1 class="page-title">🏬 لوحة تحكم المخزن</h1>
+        <p class="page-subtitle">مخزن مركزي واحد يُوزَّع على @branches.Count فروع</p>
+    </div>
+    <div class="d-flex gap-2" style="flex-wrap:wrap">
+        <a class="btn btn-outline" href="/Inventory/Receipts">📥 ايصالات التوريد</a>
+        <a class="btn btn-outline" href="/Inventory/Suppliers">🚚 الموردون</a>
+        <a class="btn btn-outline" href="/Inventory/Report">📊 التقارير</a>
+        @if (isAdmin)
+        {
+            <a class="btn btn-primary" href="/Inventory/Receipts?new=1">➕ تسجيل وارد</a>
+        }
+    </div>
+</div>
+
+<div class="stats-grid" style="margin-bottom:24px">
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#4CAF5022;color:#4CAF50"><i class="fas fa-warehouse"></i></div>
+        <div class="stat-value">@M((decimal)ViewBag.CentralValue)</div>
+        <div class="stat-label">قيمة المخزن المركزي (ج.م)</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#45B7D122;color:#45B7D1"><i class="fas fa-store"></i></div>
+        <div class="stat-value">@M((decimal)ViewBag.BranchValue)</div>
+        <div class="stat-label">قيمة المخزون بالفروع (ج.م)</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#8B5CF622;color:#8B5CF6"><i class="fas fa-coins"></i></div>
+        <div class="stat-value">@M((decimal)ViewBag.TotalValue)</div>
+        <div class="stat-label">إجمالي قيمة المخزون (ج.م)</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#FF980022;color:#FF9800"><i class="fas fa-file-invoice-dollar"></i></div>
+        <div class="stat-value">@M((decimal)ViewBag.MonthPurchases)</div>
+        <div class="stat-label">مشتريات الشهر (ج.م)</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#EF444422;color:#EF4444"><i class="fas fa-hand-holding-usd"></i></div>
+        <div class="stat-value">@M((decimal)ViewBag.Outstanding)</div>
+        <div class="stat-label">مستحق للموردين (ج.م)</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#F59E0B22;color:#F59E0B"><i class="fas fa-exclamation-triangle"></i></div>
+        <div class="stat-value">@ViewBag.LowStock</div>
+        <div class="stat-label">أصناف تحت حد التنبيه</div>
+    </div>
+    <a class="stat-card" href="/Inventory/Expiry" style="text-decoration:none;color:inherit;@((int)ViewBag.ExpiredCount > 0 ? "border:2px solid #EF4444" : "")">
+        <div class="stat-icon" style="background:#EF444422;color:#EF4444"><i class="fas fa-ban"></i></div>
+        <div class="stat-value">@ViewBag.ExpiredCount</div>
+        <div class="stat-label">دفعات منتهية الصلاحية</div>
+    </a>
+    <a class="stat-card" href="/Inventory/Expiry" style="text-decoration:none;color:inherit;@((int)ViewBag.ExpiringSoon > 0 ? "border:2px solid #F59E0B" : "")">
+        <div class="stat-icon" style="background:#F59E0B22;color:#F59E0B"><i class="fas fa-hourglass-half"></i></div>
+        <div class="stat-value">@ViewBag.ExpiringSoon</div>
+        <div class="stat-label">دفعات قاربت على الانتهاء</div>
+    </a>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">📦 أرصدة الأصناف</h3>
+        <input type="text" class="form-control" style="max-width:240px" placeholder="ابحث عن صنف..." oninput="filterInv(this.value)">
+    </div>
+    <div class="table-container">
+        <table class="data-table" id="invTable">
+            <thead>
+                <tr>
+                    <th>الصنف</th>
+                    <th>الوحدة</th>
+                    <th>التعبئة</th>
+                    <th>بالمخزن</th>
+                    @foreach (var b in branches) { <th>@b.NameAr</th> }
+                    <th>الإجمالي</th>
+                    <th>سعر التكلفة</th>
+                    <th>القيمة</th>
+                    <th>إجراءات</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var p in Model)
+                {
+                    var branchTotal = p.ProductBranches?.Sum(pb => pb.StockQuantity) ?? 0;
+                    var grandTotal = p.StockQuantity + branchTotal;
+                    var low = p.TrackStock && p.StockQuantity <= p.MinStockAlert;
+                    <tr>
+                        <td>
+                            <div style="font-weight:600">@p.NameAr</div>
+                            <div style="font-size:11px;color:var(--text-muted)">@(p.Category?.NameAr ?? "بدون فئة")</div>
+                        </td>
+                        <td><span class="badge" style="background:var(--bg-secondary)">@(string.IsNullOrWhiteSpace(p.Unit) ? "قطعة" : p.Unit)</span></td>
+                        <td>
+                            @if (p.HasPackaging)
+                            {
+                                <span style="font-size:11px">@p.PackagingName = @N(p.UnitsPerPackage) @p.Unit</span>
+                            }
+                            else
+                            {
+                                <span style="color:var(--text-muted)">—</span>
+                            }
+                        </td>
+                        <td>
+                            <span style="font-weight:700;font-size:15px;@(low ? "color:var(--danger)" : "")">@N(p.StockQuantity)</span>
+                            @if (p.HasPackaging && p.StockQuantity > 0)
+                            {
+                                <div style="font-size:10px;color:var(--text-muted)">≈ @N(p.StockQuantity / p.UnitsPerPackage) @p.PackagingName</div>
+                            }
+                            @if (low)
+                            {
+                                <div style="font-size:10px;color:var(--danger)">⚠️ تحت حد التنبيه</div>
+                            }
+                        </td>
+                        @foreach (var b in branches)
+                        {
+                            var bq = p.ProductBranches?.FirstOrDefault(pb => pb.BranchId == b.Id)?.StockQuantity ?? 0;
+                            <td>@(bq > 0 ? N(bq) : "—")</td>
+                        }
+                        <td><strong>@N(grandTotal)</strong></td>
+                        <td>@M(p.CostPrice)</td>
+                        <td><strong>@M(grandTotal * p.CostPrice)</strong></td>
+                        <td style="white-space:nowrap">
+                            <a class="btn btn-sm btn-outline" href="/Inventory/ProductCard?id=@p.Id">🧾 كارت الصنف</a>
+                            @if (isAdmin)
+                            {
+                                <button class="btn btn-sm btn-accent" onclick="openDistribute(@p.Id)">🚚 توزيع</button>
+                                <button class="btn btn-sm btn-outline" onclick="openAdjust(@p.Id)">⚙️</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="pager no-print" id="invPager"></div>
+</div>
+
+@if (isAdmin)
+{
+    <!-- Distribute Modal -->
+    <div class="modal-overlay" id="distributeModal">
+        <div class="modal" style="max-width:460px">
+            <div class="modal-header">
+                <h3 class="modal-title">🚚 توزيع على فرع (المنصرف)</h3>
+                <button class="modal-close" onclick="Modal.close('distributeModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">الصنف</label>
+                    <select id="distProductId" class="form-control" onchange="onDistProductChange()">
+                        @foreach (var p in Model)
+                        {
+                            var dUnit = string.IsNullOrWhiteSpace(p.Unit) ? "قطعة" : p.Unit;
+                            var dPack = p.PackagingName ?? "";
+                            var dPerPack = (p.UnitsPerPackage > 0 ? p.UnitsPerPackage : 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                            <option value="@p.Id"
+                                    data-stock="@p.StockQuantity.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                    data-cost="@p.CostPrice.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                    data-unit="@dUnit"
+                                    data-pack="@dPack"
+                                    data-perpack="@dPerPack">@p.NameAr</option>
+                        }
+                    </select>
+                    <div style="font-size:12px;margin-top:6px">المتاح بالمخزن: <strong id="distAvailable"></strong></div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">الفرع</label>
+                    <select id="distBranchId" class="form-control">
+                        @foreach (var b in branches) { <option value="@b.Id">@b.NameAr</option> }
+                    </select>
+                </div>
+                <div class="form-group" id="distModeRow" style="display:none">
+                    <label class="form-label">الكمية بـ</label>
+                    <div style="display:flex;gap:16px">
+                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                            <input type="radio" name="distMode" value="unit" checked onchange="onDistInput()"> <span id="distModeUnitLabel"></span>
+                        </label>
+                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                            <input type="radio" name="distMode" value="pack" onchange="onDistInput()"> <span id="distModePackLabel"></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">الكمية (<span id="distUnitLabel"></span>)</label>
+                    <input type="number" step="0.001" min="0.001" id="distQty" class="form-control" oninput="onDistInput()">
+                    <div id="distConverted" style="font-size:11px;color:var(--text-muted);margin-top:4px"></div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">هتكفي كام يوم؟ <span style="color:var(--text-muted);font-weight:400">(اختياري — لتوزيع التكلفة يوميًا)</span></label>
+                    <input type="number" step="1" min="1" id="distDays" class="form-control" placeholder="مثال: 3" oninput="onDistInput()">
+                    <div id="distDailyCost" style="font-size:11px;color:var(--accent);margin-top:4px;font-weight:700"></div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">ملاحظات</label>
+                    <textarea id="distNotes" class="form-control" rows="2"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="Modal.close('distributeModal')">إلغاء</button>
+                <button class="btn btn-accent" onclick="saveDistribute()">🚚 تأكيد التوزيع</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Adjust Modal -->
+    <div class="modal-overlay" id="adjustModal">
+        <div class="modal" style="max-width:440px">
+            <div class="modal-header">
+                <h3 class="modal-title">⚙️ تسوية / هالك / مرتجع للمخزن</h3>
+                <button class="modal-close" onclick="Modal.close('adjustModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">الصنف</label>
+                    <select id="adjProductId" class="form-control" onchange="onAdjProductChange()">
+                        @foreach (var p in Model)
+                        {
+                            var aUnit = string.IsNullOrWhiteSpace(p.Unit) ? "قطعة" : p.Unit;
+                            var aPack = p.PackagingName ?? "";
+                            var aPerPack = (p.UnitsPerPackage > 0 ? p.UnitsPerPackage : 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                            <option value="@p.Id" data-unit="@aUnit" data-pack="@aPack"
+                                    data-perpack="@aPerPack">@p.NameAr</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">نوع الحركة</label>
+                    <select id="adjType" class="form-control" onchange="onAdjTypeChange()">
+                        <option value="Adjustment">تسوية جرد (زيادة/نقص)</option>
+                        <option value="Waste">هالك / تالف</option>
+                        <option value="ReturnToWarehouse">مرتجع من فرع للمخزن</option>
+                    </select>
+                </div>
+                <div class="form-group" id="adjBranchRow" style="display:none">
+                    <label class="form-label">الفرع</label>
+                    <select id="adjBranchId" class="form-control">
+                        @foreach (var b in branches) { <option value="@b.Id">@b.NameAr</option> }
+                    </select>
+                </div>
+                <div class="form-group" id="adjModeRow" style="display:none">
+                    <label class="form-label">الكمية بـ</label>
+                    <div style="display:flex;gap:16px">
+                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                            <input type="radio" name="adjMode" value="unit" checked> <span id="adjModeUnitLabel"></span>
+                        </label>
+                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                            <input type="radio" name="adjMode" value="pack"> <span id="adjModePackLabel"></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">الكمية</label>
+                    <input type="number" step="0.001" id="adjQty" class="form-control" placeholder="استخدم رقم سالب للنقص في التسوية">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">السبب</label>
+                    <input type="text" id="adjReason" class="form-control" placeholder="مثال: جرد شهري / تلف بالتخزين">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="Modal.close('adjustModal')">إلغاء</button>
+                <button class="btn btn-primary" onclick="saveAdjust()">💾 حفظ</button>
+            </div>
+        </div>
+    </div>
+}
+
+@section Scripts {
+<script>
+function filterInv(v) { filterPagedTable('invTable', v); }
+
+document.addEventListener('DOMContentLoaded', () => {
+    initPager('invTable',    'invPager');
+    initPager('outTable',    'outPager');
+    initPager('inTable',     'inPager');
+    initPager('branchTable', 'branchPager');
+});
+const fmt = n => Number(n).toFixed(3).replace(/\.?0+$/, '');
+
+/* NOTE: these helpers are always defined and are NOT wrapped in a Razor
+   markup block. Inside such a block Razor treats the script as markup, so
+   the '&lt;' and '&lt;=' operators in JavaScript make it try to parse a tag
+   and fail with RZ1024. The admin-only UI is still gated in the markup above,
+   and every endpoint is [Authorize(Roles="Admin")] server-side. */
+/* ═════════ DISTRIBUTE ═════════ */
+function distOpt() { const s = document.getElementById('distProductId'); return s.options[s.selectedIndex]; }
+function distIsPack() { return document.querySelector('input[name="distMode"]:checked')?.value === 'pack'; }
+
+function openDistribute(productId) {
+    document.getElementById('distProductId').value = productId;
+    document.getElementById('distQty').value = '';
+    document.getElementById('distDays').value = '';
+    document.getElementById('distNotes').value = '';
+    document.querySelector('input[name="distMode"][value="unit"]').checked = true;
+    onDistProductChange();
+    Modal.open('distributeModal');
+}
+
+function onDistProductChange() {
+    const o = distOpt(); if (!o) return;
+    const unit = o.dataset.unit || 'وحدة';
+    const pack = o.dataset.pack || '';
+    const perPack = parseFloat(o.dataset.perpack) || 1;
+    const hasPack = pack && perPack > 1;
+
+    document.getElementById('distModeRow').style.display = hasPack ? 'block' : 'none';
+    document.getElementById('distModeUnitLabel').textContent = unit;
+    document.getElementById('distModePackLabel').textContent = `${pack} (${fmt(perPack)} ${unit})`;
+    if (!hasPack) document.querySelector('input[name="distMode"][value="unit"]').checked = true;
+
+    const stock = parseFloat(o.dataset.stock) || 0;
+    document.getElementById('distAvailable').textContent =
+        `${fmt(stock)} ${unit}` + (hasPack ? ` (≈ ${fmt(stock / perPack)} ${pack})` : '');
+    onDistInput();
+}
+
+function onDistInput() {
+    const o = distOpt(); if (!o) return;
+    const unit = o.dataset.unit || 'وحدة';
+    const pack = o.dataset.pack || '';
+    const perPack = parseFloat(o.dataset.perpack) || 1;
+    const cost = parseFloat(o.dataset.cost) || 0;
+    const isPack = distIsPack();
+
+    document.getElementById('distUnitLabel').textContent = isPack ? pack : unit;
+
+    const raw = parseFloat(document.getElementById('distQty').value) || 0;
+    const base = isPack ? raw * perPack : raw;
+    document.getElementById('distConverted').textContent =
+        (isPack && raw > 0) ? `= ${fmt(base)} ${unit} هتتخصم من المخزن` : '';
+
+    const days = parseInt(document.getElementById('distDays').value) || 0;
+    const el = document.getElementById('distDailyCost');
+    el.textContent = (cost > 0 && base > 0 && days > 0)
+        ? `التكلفة: ${(cost * base).toFixed(2)} ج.م — بمعدل ${((cost * base) / days).toFixed(2)} ج.م/يوم لمدة ${days} يوم`
+        : (cost > 0 && base > 0 ? `التكلفة الإجمالية: ${(cost * base).toFixed(2)} ج.م` : '');
+}
+
+async function saveDistribute() {
+    const raw = parseFloat(document.getElementById('distQty').value);
+    if (!raw || raw <= 0) { Toast.error('من فضلك أدخل كمية صحيحة'); return; }
+    const days = parseInt(document.getElementById('distDays').value);
+    Loading.show();
+    try {
+        const r = await API.post('/Inventory/Distribute', {
+            productId: parseInt(document.getElementById('distProductId').value),
+            branchId: parseInt(document.getElementById('distBranchId').value),
+            quantity: raw,
+            asPackage: distIsPack(),
+            expectedDurationDays: days > 0 ? days : null,
+            notes: document.getElementById('distNotes').value || null
+        });
+        if (r.success) { Toast.success('تم التوزيع بنجاح'); setTimeout(() => location.reload(), 700); }
+        else Toast.error(r.message || 'حدث خطأ');
+    } finally { Loading.hide(); }
+}
+
+/* ═════════ ADJUST ═════════ */
+function adjOpt() { const s = document.getElementById('adjProductId'); return s.options[s.selectedIndex]; }
+
+function openAdjust(productId) {
+    document.getElementById('adjProductId').value = productId;
+    document.getElementById('adjQty').value = '';
+    document.getElementById('adjReason').value = '';
+    document.getElementById('adjType').value = 'Adjustment';
+    document.querySelector('input[name="adjMode"][value="unit"]').checked = true;
+    onAdjProductChange();
+    onAdjTypeChange();
+    Modal.open('adjustModal');
+}
+
+function onAdjProductChange() {
+    const o = adjOpt(); if (!o) return;
+    const unit = o.dataset.unit || 'وحدة';
+    const pack = o.dataset.pack || '';
+    const perPack = parseFloat(o.dataset.perpack) || 1;
+    const hasPack = pack && perPack > 1;
+    document.getElementById('adjModeRow').style.display = hasPack ? 'block' : 'none';
+    document.getElementById('adjModeUnitLabel').textContent = unit;
+    document.getElementById('adjModePackLabel').textContent = `${pack} (${fmt(perPack)} ${unit})`;
+    if (!hasPack) document.querySelector('input[name="adjMode"][value="unit"]').checked = true;
+}
+
+function onAdjTypeChange() {
+    const t = document.getElementById('adjType').value;
+    document.getElementById('adjBranchRow').style.display =
+        (t === 'ReturnToWarehouse' || t === 'Waste') ? 'block' : 'none';
+}
+
+async function saveAdjust() {
+    const qty = parseFloat(document.getElementById('adjQty').value);
+    if (!qty) { Toast.error('من فضلك أدخل كمية'); return; }
+    const type = document.getElementById('adjType').value;
+    const needsBranch = (type === 'ReturnToWarehouse');
+    Loading.show();
+    try {
+        const r = await API.post('/Inventory/Adjust', {
+            productId: parseInt(document.getElementById('adjProductId').value),
+            quantity: qty,
+            asPackage: document.querySelector('input[name="adjMode"]:checked')?.value === 'pack',
+            type,
+            reason: document.getElementById('adjReason').value || null,
+            branchId: document.getElementById('adjBranchRow').style.display !== 'none'
+                ? parseInt(document.getElementById('adjBranchId').value) : null
+        });
+        if (r.success) { Toast.success('تم حفظ الحركة'); setTimeout(() => location.reload(), 700); }
+        else Toast.error(r.message || 'حدث خطأ');
+    } finally { Loading.hide(); }
+}
+</script>
+}
+
+@* ═════════ حركة المخزن: خرج إيه وامتى / دخل إيه ═════════ *@
+<div class="card" style="margin-bottom:20px">
+    <div class="card-header">
+        <h3 class="card-title">📤 اللي خرج من المخزن (آخر 30 يوم)</h3>
+        <a class="btn btn-sm btn-outline no-print" href="/Inventory/Report">التقرير الكامل</a>
+    </div>
+    <div class="table-container">
+        <table class="data-table" id="outTable">
+            <thead><tr><th>التاريخ</th><th>الصنف</th><th>راح فين</th><th>الكمية</th><th>النوع</th><th>القيمة</th><th>بواسطة</th></tr></thead>
+            <tbody>
+                @if (!recentOut.Any())
+                {
+                    <tr data-empty="1"><td colspan="7" style="text-align:center;color:var(--text-muted)">لا توجد حركات صرف</td></tr>
+                }
+                @foreach (var l in recentOut)
+                {
+                    <tr>
+                        <td>@l.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                        <td style="font-weight:600">@(l.Product?.NameAr ?? l.Product?.Name ?? "—")</td>
+                        <td><span class="badge badge-primary">@(l.Branch?.NameAr ?? "المخزن")</span></td>
+                        <td>
+                            <strong>@N(Math.Abs(l.QuantityChange))</strong> @(l.Product?.Unit)
+                            @if (l.EnteredAsPackaging != null && l.EnteredQuantity.HasValue)
+                            {
+                                <div style="font-size:10px;color:var(--text-muted)">@N(l.EnteredQuantity.Value) @l.EnteredAsPackaging</div>
+                            }
+                        </td>
+                        <td>
+                            @if (l.Type == RestaurantERP.Models.InventoryLogType.Waste)
+                            {
+                                <span class="badge" style="background:#78716C22;color:#78716C">هالك</span>
+                            }
+                            else
+                            {
+                                <span>@(l.DistributedAsSellable == false ? "🍳 خامة" : "🛒 للبيع")</span>
+                            }
+                        </td>
+                        <td>@(l.MovementValue.HasValue ? M(l.MovementValue.Value) : "—")</td>
+                        <td style="font-size:11px;color:var(--text-muted)">@(l.Reason)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="pager no-print" id="outPager"></div>
+</div>
+
+<div class="card" style="margin-bottom:20px">
+    <div class="card-header">
+        <h3 class="card-title">📥 اللي دخل المخزن (آخر 30 يوم)</h3>
+        <a class="btn btn-sm btn-outline no-print" href="/Inventory/Receipts">ايصالات التوريد</a>
+    </div>
+    <div class="table-container">
+        <table class="data-table" id="inTable">
+            <thead><tr><th>التاريخ</th><th>الصنف</th><th>الكمية</th><th>النوع</th><th>المصدر</th><th>القيمة</th></tr></thead>
+            <tbody>
+                @if (!recentIn.Any())
+                {
+                    <tr data-empty="1"><td colspan="6" style="text-align:center;color:var(--text-muted)">لا توجد حركات وارد</td></tr>
+                }
+                @foreach (var l in recentIn)
+                {
+                    <tr>
+                        <td>@l.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                        <td style="font-weight:600">@(l.Product?.NameAr ?? l.Product?.Name ?? "—")</td>
+                        <td>
+                            <strong>@N(Math.Abs(l.QuantityChange))</strong> @(l.Product?.Unit)
+                            @if (l.EnteredAsPackaging != null && l.EnteredQuantity.HasValue)
+                            {
+                                <div style="font-size:10px;color:var(--text-muted)">@N(l.EnteredQuantity.Value) @l.EnteredAsPackaging</div>
+                            }
+                        </td>
+                        <td><span class="badge badge-primary">@TypeAr(l.Type)</span></td>
+                        <td>@(l.SupplierName ?? l.ReceiptNumber ?? l.Branch?.NameAr ?? "—")</td>
+                        <td>@(l.MovementValue.HasValue ? M(l.MovementValue.Value) : "—")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="pager no-print" id="inPager"></div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">🏪 موجود عند الفروع دلوقتي (هيتستخدم تاني)</h3>
+    </div>
+    <div class="table-container">
+        <table class="data-table" id="branchTable">
+            <thead><tr><th>الصنف</th><th>الفرع</th><th>الكمية</th><th>الاستخدام</th><th>القيمة</th><th>آخر توزيع</th></tr></thead>
+            <tbody>
+                @if (!atBranches.Any())
+                {
+                    <tr data-empty="1"><td colspan="6" style="text-align:center;color:var(--text-muted)">لا يوجد رصيد عند الفروع</td></tr>
+                }
+                @foreach (var r in atBranches)
+                {
+                    <tr>
+                        <td style="font-weight:600">@r.Product</td>
+                        <td><span class="badge badge-primary">@r.Branch</span></td>
+                        <td><strong>@N(r.Quantity)</strong> @r.Unit</td>
+                        <td>@(r.IsSellable ? "🛒 للبيع" : "🍳 خامة")</td>
+                        <td>@M(r.Value)</td>
+                        <td style="font-size:11px;color:var(--text-muted)">@(r.LastDistributedAt?.ToString("yyyy-MM-dd") ?? "—")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="pager no-print" id="branchPager"></div>
+</div>

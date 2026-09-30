@@ -1,0 +1,71 @@
+@model IEnumerable<RestaurantERP.Models.Order>
+@{
+    ViewData["Title"] = "Orders";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title" data-t="orders">Orders</h1>
+        <p class="page-subtitle">@Model.Count() <span data-t="totalOrders">orders today</span></p>
+    </div>
+    <a href="/Manager/Index" class="btn btn-outline"><i class="fas fa-arrow-left me-2"></i><span data-t="back">Dashboard</span></a>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <div class="d-flex gap-3 align-items-center flex-wrap">
+            <input type="text" class="form-control" style="max-width:220px" placeholder="Search orders..." oninput="filterOrders(this.value)">
+            <select id="statusF" class="form-control" style="max-width:160px" onchange="filterOrders('')">
+                <option value="">All Status</option>
+                <option>Pending</option><option>Preparing</option><option>Ready</option><option>Completed</option><option>Cancelled</option>
+            </select>
+        </div>
+        <div class="d-flex gap-2">
+            <span class="badge badge-success">Revenue: @Model.Where(o=>o.Status==RestaurantERP.Models.OrderStatus.Completed).Sum(o=>o.Total).ToString("F0") EGP</span>
+        </div>
+    </div>
+    <div class="table-container">
+        <table class="data-table" id="ordersTable">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th data-t="cashier">Cashier</th>
+                    <th data-t="type">Type</th>
+                    <th data-t="items">Items</th>
+                    <th data-t="total">Total</th>
+                    <th data-t="payment">Payment</th>
+                    <th data-t="status">Status</th>
+                    <th data-t="time">Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var o in Model.OrderByDescending(x => x.CreatedAt))
+                {
+                    <tr data-status="@o.Status">
+                        <td><strong>@o.OrderNumber</strong></td>
+                        <td style="font-size:12px">@(o.Cashier?.UserName ?? "-")</td>
+                        <td><span class="badge badge-primary">@o.OrderType</span></td>
+                        <td>@(o.Items?.Count)</td>
+                        <td><strong>@o.Total.ToString("F2") EGP</strong></td>
+                        <td>@o.PaymentMethod</td>
+                        <td><span class="badge @(o.Status==RestaurantERP.Models.OrderStatus.Completed?"badge-success":o.Status==RestaurantERP.Models.OrderStatus.Cancelled?"badge-danger":"badge-warning")">@o.Status</span></td>
+                        <td style="font-size:12px">@o.CreatedAt.ToString("HH:mm")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+function filterOrders(search) {
+    const s = (search || document.querySelector('input[type=text]').value).toLowerCase();
+    const status = document.getElementById('statusF').value;
+    document.querySelectorAll('#ordersTable tbody tr').forEach(row => {
+        row.style.display = (!s || row.textContent.toLowerCase().includes(s)) && (!status || row.dataset.status === status) ? '' : 'none';
+    });
+}
+</script>
+}

@@ -1,0 +1,146 @@
+@model List<RestaurantERP.Controllers.ExpiryRow>
+@{
+    ViewData["Title"] = "الصلاحية و FIFO";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.PageTitle = "متابعة الصلاحية (FIFO)";
+    var warn = (int)ViewBag.WarnDays;
+    string N(decimal d) => d.ToString("0.###");
+    string M(decimal d) => d.ToString("N2");
+
+    var expired = Model.Where(r => r.IsExpired).ToList();
+    var soon = Model.Where(r => r.IsExpiringSoon).ToList();
+}
+
+<div class="page-header no-print">
+    <div>
+        <h1 class="page-title">⏳ متابعة الصلاحية — اصرف الأقدم الأول</h1>
+        <p class="page-subtitle">الدفعات مرتّبة بترتيب الصرف الصحيح (الأقرب انتهاءً أولًا)</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline" href="/Inventory/Dashboard">⬅ لوحة المخزن</a>
+        <a class="btn btn-accent" href="/Inventory/Distribution">🚚 توزيع</a>
+        <button class="btn btn-primary" onclick="window.print()">🖨️ طباعة</button>
+    </div>
+</div>
+
+@if (expired.Any())
+{
+    <div class="card" style="margin-bottom:16px;border:2px solid #EF4444">
+        <div class="card-body" style="background:#EF444412">
+            <div style="font-weight:900;color:#EF4444;font-size:15px">
+                ⛔ في @expired.Count دفعة منتهية الصلاحية بقيمة @M(expired.Sum(r => r.Value)) ج.م — لازم تتسجل هالك
+            </div>
+        </div>
+    </div>
+}
+@if (soon.Any())
+{
+    <div class="card" style="margin-bottom:16px;border:2px solid #F59E0B">
+        <div class="card-body" style="background:#F59E0B12">
+            <div style="font-weight:900;color:#F59E0B;font-size:15px">
+                ⚠️ في @soon.Count دفعة هتنتهي خلال @warn يوم بقيمة @M(soon.Sum(r => r.Value)) ج.م — وزّعها الأول
+            </div>
+        </div>
+    </div>
+}
+
+<div class="card no-print" style="margin-bottom:20px">
+    <div class="card-body">
+        <form method="get" class="d-flex gap-3 align-items-end" style="flex-wrap:wrap">
+            <div class="form-group" style="margin:0">
+                <label class="form-label">نبّهني قبل الانتهاء بـ (يوم)</label>
+                <input type="number" min="1" name="warnDays" class="form-control" style="max-width:160px" value="@warn">
+            </div>
+            <button type="submit" class="btn btn-primary">تحديث</button>
+        </form>
+    </div>
+</div>
+
+<div class="stats-grid" style="margin-bottom:24px">
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#EF444422;color:#EF4444"><i class="fas fa-ban"></i></div>
+        <div class="stat-value">@expired.Count</div>
+        <div class="stat-label">دفعات منتهية</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#F59E0B22;color:#F59E0B"><i class="fas fa-hourglass-half"></i></div>
+        <div class="stat-value">@soon.Count</div>
+        <div class="stat-label">تنتهي خلال @warn يوم</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#78716C22;color:#78716C"><i class="fas fa-question"></i></div>
+        <div class="stat-value">@ViewBag.NoDateCount</div>
+        <div class="stat-label">دفعات بدون تاريخ صلاحية</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#DC262622;color:#DC2626"><i class="fas fa-coins"></i></div>
+        <div class="stat-value">@M((decimal)ViewBag.ExpiredValue)</div>
+        <div class="stat-label">قيمة المنتهي (ج.م)</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header"><h3 class="card-title">📋 ترتيب الصرف (الأقدم أولًا)</h3></div>
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>#</th><th>الصنف</th><th>المتبقي من الدفعة</th><th>تاريخ الانتهاء</th>
+                    <th>الأيام المتبقية</th><th>إيصال التوريد</th><th>المورد</th><th>القيمة</th><th class="no-print"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!Model.Any())
+                {
+                    <tr><td colspan="9" style="text-align:center;color:var(--text-muted)">لا توجد دفعات مفتوحة في المخزن</td></tr>
+                }
+                @{ var i = 0; }
+                @foreach (var r in Model)
+                {
+                    i++;
+                    var bg = r.IsExpired ? "#EF444414" : r.IsExpiringSoon ? "#F59E0B14" : "";
+                    <tr style="background:@bg">
+                        <td style="font-weight:900;color:var(--text-muted)">@i</td>
+                        <td>
+                            <div style="font-weight:700">@r.Product</div>
+                            @if (!string.IsNullOrEmpty(r.BatchNumber))
+                            {
+                                <div style="font-size:10px;color:var(--text-muted)">دفعة: @r.BatchNumber</div>
+                            }
+                        </td>
+                        <td><strong>@N(r.Remaining)</strong> @r.Unit
+                            <div style="font-size:10px;color:var(--text-muted)">من أصل @N(r.Received)</div>
+                        </td>
+                        <td>@(r.ExpiryDate.HasValue ? r.ExpiryDate.Value.ToString("yyyy-MM-dd") : "—")</td>
+                        <td>
+                            @if (!r.DaysLeft.HasValue)
+                            {
+                                <span style="color:var(--text-muted)">غير محدد</span>
+                            }
+                            else if (r.IsExpired)
+                            {
+                                <span class="badge" style="background:#EF444422;color:#EF4444;font-weight:900">⛔ منتهي من @(-r.DaysLeft!.Value) يوم</span>
+                            }
+                            else if (r.IsExpiringSoon)
+                            {
+                                <span class="badge" style="background:#F59E0B22;color:#F59E0B;font-weight:900">⚠️ @r.DaysLeft يوم</span>
+                            }
+                            else
+                            {
+                                <span style="color:#16A34A">@r.DaysLeft يوم</span>
+                            }
+                        </td>
+                        <td>@(r.ReceiptNumber ?? "—")
+                            <div style="font-size:10px;color:var(--text-muted)">@(r.ReceiptDate?.ToString("yyyy-MM-dd") ?? "")</div>
+                        </td>
+                        <td>@(r.Supplier ?? "—")</td>
+                        <td><strong>@M(r.Value)</strong></td>
+                        <td class="no-print">
+                            <a class="btn btn-sm btn-accent" href="/Inventory/Distribution?productId=@r.ProductId">وزّع</a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

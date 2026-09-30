@@ -1,0 +1,224 @@
+@model RestaurantERP.Models.Order
+@{
+    ViewData["Title"] = "Order Details";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">#@Model.OrderNumber</h1>
+        <p class="page-subtitle">@Model.CreatedAt.ToString("dddd, MMMM dd yyyy — HH:mm")</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/Admin/Orders" class="btn btn-outline"><i class="fas fa-arrow-left me-2"></i><span data-t="back">Back</span></a>
+        <button class="btn btn-primary" onclick="printThisOrder()"><i class="fas fa-print me-2"></i><span data-t="print">Print</span></button>
+    </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 360px;gap:24px">
+    <div>
+        <!-- Order Items -->
+        <div class="card" style="margin-bottom:24px">
+            <div class="card-header">
+                <h3 class="card-title" data-t="orderItems">Order Items</h3>
+                <span class="badge badge-primary">@(Model.Items?.Count ?? 0) <span data-t="items">items</span></span>
+            </div>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th data-t="product">Product</th>
+                            <th data-t="unitPrice">Unit Price</th>
+                            <th data-t="quantity">Qty</th>
+                            <th data-t="total">Total</th>
+                            <th data-t="notes">Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.Items != null)
+                        {
+                            @foreach (var item in Model.Items)
+                            {
+                                <tr>
+                                    <td>
+                                        <div style="font-weight:600">@(item.Product != null ? item.Product.Name : "Unknown Product")</div>
+                                        <div style="font-size:12px;color:var(--text-muted)" dir="rtl">@(item.Product != null ? item.Product.NameAr : "Unknown Product")</div>
+                                    </td>
+                                    <td>@item.UnitPrice.ToString("F2") EGP</td>
+                                    <td>
+                                        <span class="badge badge-primary">×@item.Quantity</span>
+                                    </td>
+                                    <td><strong>@((item.UnitPrice * item.Quantity).ToString("F2")) EGP</strong></td>
+                                    <td style="font-size:12px;color:var(--text-muted)">@item.Notes</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Status Timeline -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title" data-t="orderTimeline">Order Timeline</h3>
+            </div>
+            <div class="card-body" style="padding:24px">
+                <div style="display:flex;gap:0;position:relative">
+                    @{
+                        var allStatuses = new[] { "Pending", "Preparing", "Ready", "Completed" };
+                        var currentIdx = Array.IndexOf(allStatuses, Model.Status.ToString());
+                        if (Model.Status == RestaurantERP.Models.OrderStatus.Cancelled) currentIdx = -1;
+                    }
+                    @for (int i = 0; i < allStatuses.Length; i++)
+                    {
+                        var isDone = i <= currentIdx;
+                        var isCurrent = i == currentIdx;
+                        <div style="flex:1;text-align:center;position:relative">
+                            @if (i < allStatuses.Length - 1)
+                            {
+                                <div style="position:absolute;top:20px;left:50%;width:100%;height:3px;background:@(isDone && !isCurrent ? "var(--primary)" : "var(--border-color)");z-index:0"></div>
+                            }
+                            <div style="width:42px;height:42px;border-radius:50%;background:@(isCurrent ? "var(--primary)" : isDone ? "var(--success)" : "var(--bg-secondary)");color:@(isDone ? "white" : "var(--text-muted)");display:flex;align-items:center;justify-content:center;margin:0 auto;position:relative;z-index:1;font-size:16px;border:3px solid @(isDone ? "transparent" : "var(--border-color)")">
+                                <i class="fas @(isDone ? "fa-check" : "fa-circle")"></i>
+                            </div>
+                            <div style="margin-top:8px;font-size:12px;font-weight:@(isCurrent ? "700" : "400");color:@(isDone ? "var(--text-primary)" : "var(--text-muted)")">@allStatuses[i]</div>
+                        </div>
+                    }
+                </div>
+                @if (Model.Status == RestaurantERP.Models.OrderStatus.Cancelled)
+                {
+                    <div style="margin-top:20px;padding:12px;background:#FF6B6B22;border-radius:8px;color:#FF6B6B;text-align:center">
+                        <i class="fas fa-times-circle me-2"></i><span data-t="orderCancelled">This order was cancelled</span>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div>
+        <!-- Order Info -->
+        <div class="card" style="margin-bottom:24px">
+            <div class="card-header">
+                <h3 class="card-title" data-t="orderInfo">Order Information</h3>
+            </div>
+            <div class="card-body" style="padding:20px">
+                <div style="display:flex;flex-direction:column;gap:14px">
+                    <div style="display:flex;justify-content:space-between">
+                        <span style="color:var(--text-muted)" data-t="status">Status</span>
+                        <span class="badge @(Model.Status == RestaurantERP.Models.OrderStatus.Completed ? "badge-success" : Model.Status == RestaurantERP.Models.OrderStatus.Cancelled ? "badge-danger" : "badge-warning")">@Model.Status</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between">
+                        <span style="color:var(--text-muted)" data-t="type">Type</span>
+                        <span>@Model.OrderType</span>
+                    </div>
+                    @if (Model.Table != null)
+                    {
+                        <div style="display:flex;justify-content:space-between">
+                            <span style="color:var(--text-muted)" data-t="table">Table</span>
+                            <span>@Model.Table.TableNumber</span>
+                        </div>
+                    }
+                    <div style="display:flex;justify-content:space-between">
+                        <span style="color:var(--text-muted)" data-t="cashier">Cashier</span>
+                        <span>@(Model.Cashier?.UserName ?? "N/A")</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between">
+                        <span style="color:var(--text-muted)" data-t="payment">Payment</span>
+                        <span>@Model.PaymentMethod</span>
+                    </div>
+                    @if (!string.IsNullOrEmpty(Model.Notes))
+                    {
+                        <div>
+                            <span style="color:var(--text-muted)" data-t="notes">Notes</span>
+                            <p style="margin-top:4px;font-size:13px">@Model.Notes</p>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Totals -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title" data-t="totals">Payment Summary</h3>
+            </div>
+            <div class="card-body" style="padding:20px">
+                <div style="display:flex;flex-direction:column;gap:12px">
+                    <div style="display:flex;justify-content:space-between">
+                        <span style="color:var(--text-muted)" data-t="subtotal">Subtotal</span>
+                        <span>@Model.SubTotal.ToString("F2") EGP</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between">
+                        <span style="color:var(--text-muted);font-size:11px">* Prices include tax</span>
+                    </div>
+                    @if (Model.DiscountAmount > 0)
+                    {
+                        <div style="display:flex;justify-content:space-between">
+                            <span style="color:var(--text-muted)" data-t="discount">Discount</span>
+                            <span style="color:var(--danger)">-@Model.DiscountAmount.ToString("F2") EGP</span>
+                        </div>
+                    }
+                    <div style="height:1px;background:var(--border-color)"></div>
+                    <div style="display:flex;justify-content:space-between;font-size:20px;font-weight:700">
+                        <span data-t="total">Total</span>
+                        <span style="color:var(--primary)">@Model.Total.ToString("F2") EGP</span>
+                    </div>
+                    @if (Model.AmountPaid > 0)
+                    {
+                        <div style="display:flex;justify-content:space-between;color:var(--text-muted)">
+                            <span data-t="amountPaid">Amount Paid</span>
+                            <span>@Model.AmountPaid.ToString("F2") EGP</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;color:var(--text-muted)">
+                            <span data-t="change">Change</span>
+                            <span>@Model.Change.ToString("F2") EGP</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function printThisOrder() {
+            const items = [
+                @if (Model.Items != null)
+                {
+                        @foreach (var item in Model.Items)
+                        {
+                                                @Html.Raw($"{{name:'{(item.Product != null ? item.Product.Name : "Unknown Product")}',qty:{item.Quantity},price:{item.UnitPrice}}},")
+                        }
+                }
+            ];
+            const itemsHtml = items.map(i => `<tr><td>${i.name}</td><td style="text-align:center">${i.qty}</td><td style="text-align:right">${(i.price*i.qty).toFixed(2)}</td></tr>`).join('');
+            const html = `
+                <div style="font-family:'Cairo',sans-serif;max-width:300px;margin:0 auto;padding:10px">
+                    <div style="text-align:center;border-bottom:2px dashed #333;padding-bottom:10px;margin-bottom:10px">
+                        <h2 style="margin:0;font-size:18px">نادي دار الطائرات</h2>
+                        <p style="margin:2px 0;font-size:11px">Aircraft Factory Club</p>
+                    </div>
+                    <div style="font-size:12px;margin-bottom:10px">
+                        <div>Order: <strong>@Model.OrderNumber</strong></div>
+                        <div>Date: @Model.CreatedAt.ToString("yyyy/MM/dd HH:mm")</div>
+                        <div>Type: @Model.OrderType</div>
+                    </div>
+                    <table style="width:100%;font-size:12px;border-top:1px dashed #333;border-bottom:1px dashed #333">
+                        <thead><tr><th style="text-align:left;padding:4px">Item</th><th style="text-align:center;padding:4px">Qty</th><th style="text-align:right;padding:4px">Price</th></tr></thead>
+                        <tbody>${itemsHtml}</tbody>
+                    </table>
+                    <div style="font-size:12px;margin-top:10px">
+                        <div style="display:flex;justify-content:space-between"><span>Subtotal:</span><span>@Model.SubTotal.ToString("F2") EGP</span></div>
+                        <div style="font-size:10px;color:#888;text-align:center;margin-top:4px">* Prices include tax / الأسعار شاملة الضريبة</div>
+                        <div style="display:flex;justify-content:space-between;font-weight:bold;font-size:14px;border-top:1px dashed #333;margin-top:6px;padding-top:6px"><span>TOTAL:</span><span>@Model.Total.ToString("F2") EGP</span></div>
+                    </div>
+                    <div style="text-align:center;margin-top:16px;font-size:11px;border-top:1px dashed #333;padding-top:10px">
+                        <p style="margin:0">شكراً لزيارتكم — Thank you!</p>
+                    </div>
+                </div>`;
+            printInvoice(html);
+        }
+    </script>
+}

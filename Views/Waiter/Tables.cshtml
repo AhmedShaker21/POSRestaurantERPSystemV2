@@ -1,0 +1,368 @@
+@model IEnumerable<RestaurantERP.Models.DiningTable>
+@{
+    ViewData["Title"] = "Tables";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var activeOrders = ViewBag.ActiveOrders as List<RestaurantERP.Models.Order> ?? new();
+
+    // Serialized up here so the script block only needs a single-line @ expression.
+    var settingsJson = System.Text.Json.JsonSerializer.Serialize(
+        (ViewBag.Settings as Dictionary<string, string>) ?? new Dictionary<string, string>(),
+        new System.Text.Json.JsonSerializerOptions
+        {
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        });
+}
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title" data-t="tables">Tables</h1>
+        <p class="page-subtitle" data-t="selectTableToOrder">Select a table to take an order</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/Waiter/Index" class="btn btn-primary">
+            <i class="fas fa-plus me-2"></i><span data-t="newOrder">New Order</span>
+        </a>
+        <button class="btn btn-outline" onclick="refreshTables()">
+            <i class="fas fa-sync me-2"></i><span data-t="refresh">Refresh</span>
+        </button>
+    </div>
+</div>
+
+<!-- Status Legend -->
+<div class="d-flex gap-3 flex-wrap" style="margin-bottom:24px">
+    @{
+        var statusConfig = new[] {
+            ("Available", "#4CAF50", "fa-check-circle", Model.Count(t => t.Status == RestaurantERP.Models.TableStatus.Available)),
+            ("Occupied",  "#FF9800", "fa-user-friends", Model.Count(t => t.Status == RestaurantERP.Models.TableStatus.Occupied)),
+            ("Reserved",  "#45B7D1", "fa-calendar-check", Model.Count(t => t.Status == RestaurantERP.Models.TableStatus.Reserved)),
+            ("Cleaning",  "#9E9E9E", "fa-broom", Model.Count(t => t.Status == RestaurantERP.Models.TableStatus.Cleaning)),
+        };
+    }
+    @foreach (var (label, color, icon, count) in statusConfig)
+    {
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 18px;background:var(--card-bg);border-radius:10px;border-left:4px solid @color;min-width:140px">
+            <i class="fas @icon" style="color:@color;font-size:18px"></i>
+            <div>
+                <div style="font-size:20px;font-weight:700;color:@color">@count</div>
+                <div style="font-size:12px;color:var(--text-muted)">@label</div>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Section Filter -->
+<div class="d-flex gap-2 flex-wrap" id="sectionFilter" style="margin-bottom:20px">
+    <button class="btn btn-primary section-btn" data-section="all" onclick="filterSection('all', this)" data-t="allSections">All Sections</button>
+    @foreach (var sec in Model.Select(t => t.Section).Where(s => !string.IsNullOrEmpty(s)).Distinct())
+    {
+        <button class="btn btn-outline section-btn" data-section="@sec" onclick="filterSection('@sec', this)">@sec</button>
+    }
+</div>
+
+<!-- Tables Grid -->
+<div id="tablesGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px">
+    @foreach (var table in Model.OrderBy(t => t.TableNumber))
+    {
+        var activeOrder = activeOrders.FirstOrDefault(o => o.TableId == table.Id);
+        var statusColor = table.Status switch {
+            RestaurantERP.Models.TableStatus.Available => "#4CAF50",
+            RestaurantERP.Models.TableStatus.Occupied  => "#FF9800",
+            RestaurantERP.Models.TableStatus.Reserved  => "#45B7D1",
+            RestaurantERP.Models.TableStatus.Cleaning  => "#9E9E9E",
+            _ => "#aaa"
+        };
+        var statusIcon = table.Status switch {
+            RestaurantERP.Models.TableStatus.Available => "fa-check-circle",
+            RestaurantERP.Models.TableStatus.Occupied  => "fa-user-friends",
+            RestaurantERP.Models.TableStatus.Reserved  => "fa-calendar-check",
+            RestaurantERP.Models.TableStatus.Cleaning  => "fa-broom",
+            _ => "fa-circle"
+        };
+        var isAvailable = table.Status == RestaurantERP.Models.TableStatus.Available;
+        var isOccupied = table.Status == RestaurantERP.Models.TableStatus.Occupied;
+
+        <div class="table-card" data-section="@table.Section"
+             style="background:var(--card-bg);border-radius:16px;border-top:5px solid @statusColor;padding:20px;cursor:@(isAvailable || isOccupied ? "pointer" : "default");transition:all 0.2s;box-shadow:var(--shadow)"
+             onclick="@(isAvailable ? $"openNewOrder({table.Id}, {table.TableNumber})" : isOccupied ? $"openTableOrder({table.Id}, {table.TableNumber})" : "")"
+             onmouseover="if(@(isAvailable || isOccupied ? "true" : "false"))this.style.transform='translateY(-4px)'"
+             onmouseout="this.style.transform=''">
+
+            <div style="text-align:center;margin-bottom:12px">
+                <div style="font-size:48px;font-weight:900;color:@statusColor;line-height:1">@table.TableNumber</div>
+                <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px" data-t="tableLabel">TABLE</div>
+            </div>
+
+            <div style="text-align:center;margin-bottom:10px">
+                <span style="background:@(statusColor)22;color:@statusColor;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600">
+                    <i class="fas @statusIcon me-1" style="font-size:10px"></i>@table.Status
+                </span>
+            </div>
+
+            <div style="font-size:12px;color:var(--text-muted);text-align:center;margin-bottom:10px">
+                <i class="fas fa-users me-1"></i>@table.Capacity <span data-t="seats">seats</span>
+                @if (!string.IsNullOrEmpty(table.Section))
+                {
+                    <span style="margin-left:6px;padding:2px 8px;background:var(--bg-secondary);border-radius:10px">@table.Section</span>
+                }
+            </div>
+
+            @if (activeOrder != null)
+            {
+                <div style="background:var(--bg-secondary);border-radius:10px;padding:10px;margin-top:8px">
+                    <div style="font-size:12px;font-weight:600;color:#FF9800;margin-bottom:4px">
+                        <i class="fas fa-receipt me-1"></i>#@activeOrder.OrderNumber
+                    </div>
+                    <div style="font-size:11px;color:var(--text-muted)">
+                        @(activeOrder.Items?.Count ?? 0) <span data-t="items">items</span>
+                        · @activeOrder.SubTotal.ToString("F0") EGP
+                    </div>
+                    <div style="margin-top:6px">
+                        <span style="font-size:10px;padding:2px 8px;border-radius:10px;background:@(activeOrder.Status==RestaurantERP.Models.OrderStatus.Ready?"#4CAF5022":"#FF980022");color:@(activeOrder.Status==RestaurantERP.Models.OrderStatus.Ready?"#4CAF50":"#FF9800")">
+                            @activeOrder.Status
+                        </span>
+                    </div>
+                </div>
+            }
+            else if (isAvailable)
+            {
+                <div style="text-align:center;color:#4CAF50;font-size:12px;margin-top:8px">
+                    <i class="fas fa-plus-circle me-1"></i><span data-t="tapToOrder">Tap to order</span>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- New Order Modal (quick table order) -->
+<div class="modal-overlay" id="newOrderModal">
+    <div class="modal" style="max-width:420px">
+        <div class="modal-header">
+            <h3 class="modal-title">
+                <i class="fas fa-utensils me-2" style="color:var(--primary)"></i>
+                <span data-t="orderForTable">Order for Table</span> <span id="modalTableNum"></span>
+            </h3>
+            <button class="modal-close" onclick="Modal.close('newOrderModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p style="color:var(--text-muted);margin-bottom:20px" data-t="goToPOS">
+                Go to the POS terminal to place a full order, or use the quick options below.
+            </p>
+            <input type="hidden" id="selectedTableId">
+            <div class="d-flex flex-column gap-3">
+                <button class="btn btn-primary" onclick="goToPOS()" style="padding:16px;font-size:15px">
+                    <i class="fas fa-cash-register me-2"></i><span data-t="openPOS">Open Full POS Terminal</span>
+                </button>
+                <button class="btn btn-outline" onclick="viewTableDetails()" style="padding:14px">
+                    <i class="fas fa-eye me-2"></i><span data-t="viewTableOrder">View Table Order</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Table Order Details Modal -->
+<div class="modal-overlay" id="tableOrderModal">
+    <div class="modal" style="max-width:500px">
+        <div class="modal-header">
+            <h3 class="modal-title" id="tableOrderTitle">Table Order</h3>
+            <button class="modal-close" onclick="Modal.close('tableOrderModal')">&times;</button>
+        </div>
+        <div class="modal-body" id="tableOrderContent">
+            <div style="text-align:center;padding:40px">
+                <i class="fas fa-spinner fa-spin fa-2x" style="color:var(--primary)"></i>
+            </div>
+        </div>
+        <div class="modal-footer" id="tableOrderFooter"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+const SETTINGS = @Html.Raw(settingsJson);
+let currentTableId = null;
+let currentTableNum = null;
+
+function filterSection(section, btn) {
+    document.querySelectorAll('.section-btn').forEach(b => b.className = b.className.replace('btn-primary','btn-outline'));
+    btn.className = btn.className.replace('btn-outline','btn-primary');
+    document.querySelectorAll('.table-card').forEach(card => {
+        card.style.display = section === 'all' || card.dataset.section === section ? '' : 'none';
+    });
+}
+
+function openNewOrder(tableId, tableNum) {
+    currentTableId = tableId;
+    currentTableNum = tableNum;
+    document.getElementById('selectedTableId').value = tableId;
+    document.getElementById('modalTableNum').textContent = tableNum;
+    Modal.open('newOrderModal');
+}
+
+function goToPOS() {
+    window.location.href = `/Waiter?tableId=${currentTableId}`;
+}
+
+function viewTableDetails() {
+    Modal.close('newOrderModal');
+    openTableOrder(currentTableId, currentTableNum);
+}
+
+async function openTableOrder(tableId, tableNum) {
+    currentTableId = tableId;
+    currentTableNum = tableNum;
+    document.getElementById('tableOrderTitle').textContent = `Table ${tableNum} — Active Order`;
+    document.getElementById('tableOrderContent').innerHTML = '<div style="text-align:center;padding:40px"><i class="fas fa-spinner fa-spin fa-2x" style="color:var(--primary)"></i></div>';
+    document.getElementById('tableOrderFooter').innerHTML = '';
+    Modal.open('tableOrderModal');
+
+    try {
+        const data = await API.get(`/Waiter/GetTableOrder?tableId=${tableId}`);
+        if (!data.hasOrder) {
+            document.getElementById('tableOrderContent').innerHTML = `
+                <div style="text-align:center;padding:40px;color:var(--text-muted)">
+                    <i class="fas fa-check-circle fa-3x" style="color:#4CAF50;margin-bottom:16px;display:block"></i>
+                    <div style="font-size:16px;font-weight:600">No active order</div>
+                    <div style="font-size:13px;margin-top:8px">This table has no pending orders</div>
+                </div>`;
+            document.getElementById('tableOrderFooter').innerHTML = `
+                <button class="btn btn-primary" onclick="Modal.close('tableOrderModal');openNewOrder(${tableId},${tableNum})">
+                    <i class="fas fa-plus me-2"></i>Place New Order
+                </button>`;
+            return;
+        }
+
+        const o = data;
+        const itemsHtml = (o.items||[]).map(i => `
+            <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border-color)">
+                <div>
+                    <div style="font-weight:600">${i.productName}</div>
+                    <div style="font-size:11px;color:var(--text-muted)" dir="rtl">${i.productNameAr || ''}</div>
+                </div>
+                <div style="text-align:right">
+                    <div style="font-weight:600">${(i.unitPrice * i.quantity).toFixed(2)} EGP</div>
+                    <div style="font-size:11px;color:var(--text-muted)">x${i.quantity} × ${i.unitPrice.toFixed(2)}</div>
+                </div>
+            </div>`).join('');
+
+        const statusColor = o.status === 'Ready' ? '#4CAF50' : o.status === 'Preparing' ? '#FF9800' : '#45B7D1';
+        const ordersHtml = (o.orders||[]).map(x =>
+            `<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);padding:2px 0">
+                <span>#${x.orderNumber} · ${x.time}</span><span>${x.total.toFixed(2)} EGP</span>
+             </div>`).join('');
+
+        document.getElementById('tableOrderContent').innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                <div style="font-size:16px;font-weight:700">${o.orderCount > 1 ? `${o.orderCount} orders on this table` : `#${o.orderNumber}`}</div>
+                <span style="background:${statusColor}22;color:${statusColor};padding:4px 12px;border-radius:20px;font-size:13px;font-weight:600">${o.status}</span>
+            </div>
+            ${o.orderCount > 1 ? `<div style="margin-bottom:12px;padding:8px;background:var(--bg-secondary);border-radius:8px">${ordersHtml}</div>` : ''}
+            <div style="margin-bottom:16px">${itemsHtml}</div>
+            <div style="background:var(--bg-secondary);border-radius:10px;padding:14px">
+                <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:14px">
+                    <span style="color:var(--text-muted)">Running total</span>
+                    <strong style="font-size:18px;color:var(--primary)">${o.total.toFixed(2)} EGP</strong>
+                </div>
+                <div style="font-size:12px;color:var(--text-muted)">${o.itemCount} items · not settled yet</div>
+            </div>`;
+
+        document.getElementById('tableOrderFooter').innerHTML = `
+            <button class="btn btn-outline" onclick="freeTable(${tableId})">
+                <i class="fas fa-broom me-2"></i>Mark for Cleaning
+            </button>
+            <button class="btn btn-accent" onclick="Modal.close('tableOrderModal');openNewOrder(${tableId},${tableNum})">
+                <i class="fas fa-plus me-2"></i>Add More Items
+            </button>
+            <button class="btn btn-primary" onclick="requestBill(${tableId})">
+                <i class="fas fa-file-invoice me-2"></i>Print Bill
+            </button>`;
+
+    } catch(e) {
+        document.getElementById('tableOrderContent').innerHTML = '<p style="color:var(--danger)">Failed to load order.</p>';
+    }
+}
+
+async function requestBill(tableId) {
+    try {
+        const data = await API.post('/Waiter/RequestBill', { tableId });
+        if (!data.success) { Toast.error(data.message || 'لا يوجد حساب مفتوح'); return; }
+
+        const o = data.order;
+        const orgName   = SETTINGS['OrgName']   || 'نادي دار الطائرات';
+        const orgNameEn = SETTINGS['OrgNameEn'] || 'Aircraft Factory Club';
+        const phone     = SETTINGS['Phone']     || '';
+        const address   = SETTINGS['Address']   || '';
+        const footer    = SETTINGS['ReceiptFooter'] || 'شكراً لزيارتكم - Thank you for your visit';
+        const typeAr    = { DineIn:'صالة', Takeaway:'تيك أواي', Delivery:'توصيل' };
+
+        const rows = (o.items||[]).map(i => `
+            <tr>
+                <td style="text-align:right;direction:rtl;padding:4px">${i.productNameAr || i.productName}</td>
+                <td style="text-align:center;padding:4px">${i.quantity}</td>
+                <td style="text-align:right;padding:4px">${Number(i.unitPrice).toFixed(2)}</td>
+                <td style="text-align:right;padding:4px">${Number(i.totalPrice).toFixed(2)}</td>
+            </tr>`).join('');
+
+        const html = `
+            <div style="font-family:'Cairo',sans-serif;max-width:300px;margin:0 auto;padding:10px;color:#000">
+                <div style="border-bottom:2px dashed #333;padding-bottom:10px;margin-bottom:10px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                        <img src="/logo.jpg" alt="Logo" style="max-width:80px;max-height:80px;object-fit:contain" onerror="this.style.display='none'">
+                        <img src="/qrcode.jpeg" alt="QR" style="width:75px;height:75px;object-fit:contain" onerror="this.style.display='none'">
+                    </div>
+                    <div style="text-align:center">
+                        <h2 style="margin:0;font-size:18px">${orgName}</h2>
+                        <p style="margin:4px 0;font-size:12px">${orgNameEn}</p>
+                        ${phone   ? `<p style="margin:0;font-size:11px">Tel: ${phone}</p>` : ''}
+                        ${address ? `<p style="margin:0;font-size:11px">${address}</p>` : ''}
+                    </div>
+                </div>
+                <div style="font-size:12px;margin-bottom:10px;direction:rtl;line-height:1.7">
+                    <div>الطلب: <strong>${o.orderNumber}</strong></div>
+                    ${o.orderCount > 1 ? `<div style="font-size:10px">إجمالي ${o.orderCount} طلبات على الطاولة</div>` : ''}
+                    <div>التاريخ: ${new Date(o.createdAt.endsWith('Z') ? o.createdAt : o.createdAt+'Z').toLocaleString('ar-EG')}</div>
+                    <div>النوع: ${typeAr[o.orderType] || o.orderType}</div>
+                    ${o.cashier      ? `<div>الكاشير: ${o.cashier}</div>` : ''}
+                    ${o.tableNumber  ? `<div>الطاولة: ${o.tableNumber}</div>` : ''}
+                    ${o.customerName ? `<div>العميل: ${o.customerName}</div>` : ''}
+                    ${o.branchNameAr ? `<div>الفرع: ${o.branchNameAr}</div>` : ''}
+                </div>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;border-top:1px dashed #333;border-bottom:1px dashed #333;direction:rtl">
+                    <thead><tr>
+                        <th style="text-align:right;padding:4px">الصنف</th>
+                        <th style="text-align:center;padding:4px">ك</th>
+                        <th style="text-align:right;padding:4px">سعر</th>
+                        <th style="text-align:right;padding:4px">إجمالي</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+                <div style="font-size:12px;margin-top:10px;direction:rtl;line-height:1.8">
+                    ${o.discountAmount > 0 ? `
+                    <div style="display:flex;justify-content:space-between"><span>المجموع الفرعي:</span><span>${Number(o.subTotal).toFixed(2)} ج.م</span></div>
+                    <div style="display:flex;justify-content:space-between;color:#22c55e"><span>خصم:</span><span>-${Number(o.discountAmount).toFixed(2)} ج.م</span></div>` : ''}
+                    <div style="display:flex;justify-content:space-between;font-weight:bold;font-size:15px;border-top:1px dashed #333;margin-top:6px;padding-top:6px">
+                        <span>الإجمالي:</span><span>${Number(o.total).toFixed(0)} ج.م</span>
+                    </div>
+                    <div style="text-align:center;margin-top:6px;font-size:10px">* الأسعار شاملة الضريبة</div>
+                </div>
+                <div style="text-align:center;margin-top:16px;font-size:11px;border-top:1px dashed #333;padding-top:10px">
+                    <p style="margin:0">${footer}</p>
+                </div>
+            </div>`;
+        printInvoice(html);
+    } catch(e) { Toast.error('تعذر طباعة الفاتورة'); }
+}
+
+async function freeTable(tableId) {
+    if (!confirm('Mark this table for cleaning?')) return;
+    try {
+        const res = await API.post('/Waiter/FreeTable', { tableId });
+        if (res.success) { Toast.success('Table marked for cleaning'); Modal.close('tableOrderModal'); setTimeout(() => location.reload(), 600); }
+        else Toast.error(res.message || 'Failed');
+    } catch(e) { Toast.error('Error'); }
+}
+
+async function refreshTables() {
+    location.reload();
+}
+</script>
+}

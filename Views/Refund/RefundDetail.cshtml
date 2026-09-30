@@ -1,0 +1,406 @@
+@model RestaurantERP.Models.Refund
+@{
+    ViewData["Title"] = "Refund Detail";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title" style="color:var(--danger)">
+            <i class="fas fa-undo-alt me-2"></i>@Model.RefundNumber
+        </h1>
+        <p class="page-subtitle">@Model.CreatedAt.ToString("dddd, MMMM dd yyyy — hh:mm tt")</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/Refund/AdminRefunds?date=@Model.CreatedAt.ToString("yyyy-MM-dd")" class="btn btn-outline">
+            <i class="fas fa-arrow-left me-2"></i><span data-t="back">Back</span>
+        </a>
+        <button class="btn btn-primary" onclick="printRefund()">
+            <i class="fas fa-print me-2"></i><span data-t="print">Print</span>
+        </button>
+    </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 340px;gap:24px">
+
+    <!-- LEFT -->
+    <div>
+        <div class="card" style="margin-bottom:24px">
+            <div class="card-header">
+                <h3 class="card-title"><i class="fas fa-list me-2" style="color:var(--danger)"></i>Refunded Items</h3>
+                <span class="badge" style="background:#FF6B6B22;color:#FF6B6B">@Model.Items.Count item(s)</span>
+            </div>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th data-t="product">Product</th>
+                            <th data-t="unitPrice">Unit Price</th>
+                            <th data-t="quantity">Qty</th>
+                            <th data-t="total">Refund Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in Model.Items)
+                        {
+                            <tr>
+                                <td>
+                                    <div style="font-weight:600">@item.ProductName</div>
+                                    @if (!string.IsNullOrEmpty(item.ProductNameAr))
+                                    {
+                                        <div style="font-size:12px;color:var(--text-muted)" dir="rtl">@item.ProductNameAr</div>
+                                    }
+                                </td>
+                                <td>@item.UnitPrice.ToString("F2") EGP</td>
+                                <td><span class="badge badge-primary">×@item.Quantity</span></td>
+                                <td><strong style="color:var(--danger)">−@item.TotalPrice.ToString("F2") EGP</strong></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        @if (Model.OriginalOrder != null)
+        {
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title"><i class="fas fa-receipt me-2" style="color:var(--primary)"></i>Original Order</h3>
+                    <a href="/Admin/OrderDetails/@Model.OriginalOrder.Id" class="btn btn-sm btn-outline">
+                        <i class="fas fa-external-link-alt me-1"></i>View Full Order
+                    </a>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>Qty</th>
+                                <th>Unit Price</th>
+                                <th>Total</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in Model.OriginalOrder.Items)
+                            {
+                                var refundedQty = Model.Items.Where(ri => ri.OrderItemId == item.Id).Sum(ri => ri.Quantity);
+                                var isFullyRefunded = refundedQty >= item.Quantity;
+                                <tr style="opacity:@(isFullyRefunded ? "0.5" : "1")">
+                                    <td>@(string.IsNullOrEmpty(item.ProductName) ? item.Product?.Name ?? "—" : item.ProductName)</td>
+                                    <td>×@item.Quantity</td>
+                                    <td>@item.UnitPrice.ToString("F2") EGP</td>
+                                    <td>@item.TotalPrice.ToString("F2") EGP</td>
+                                    <td>
+                                        @if (isFullyRefunded)
+                                        {
+                                            <span style="color:#FF6B6B;font-size:12px;font-weight:600"><i class="fas fa-undo me-1"></i>Refunded</span>
+                                        }
+                                        else if (refundedQty > 0)
+                                        {
+
+                                            <span style="color:#FF9800;font-size:12px;font-weight:600"><i class="fas fa-minus me-1"></i>Partial (@refundedQty refunded)</span>
+                                        }
+                                        else
+                                        {
+
+                                            <span style="color:#4CAF50;font-size:12px;font-weight:600"><i class="fas fa-check me-1"></i>Kept</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- RIGHT -->
+    <div>
+        <div class="card" style="margin-bottom:20px">
+            <div class="card-body" style="padding:24px;text-align:center">
+                <div style="width:70px;height:70px;border-radius:50%;background:#FF6B6B22;color:#FF6B6B;font-size:30px;display:flex;align-items:center;justify-content:center;margin:0 auto 14px">
+                    <i class="fas fa-undo-alt"></i>
+                </div>
+                @{
+                    var typeColor = Model.RefundType == RestaurantERP.Models.RefundType.Full ? "#FF6B6B" : "#FF9800";
+                }
+                <div style="font-size:13px;color:var(--text-muted);margin-bottom:6px">Refund Type</div>
+                <span style="background:@(typeColor)22;color:@typeColor;padding:6px 18px;border-radius:20px;font-size:14px;font-weight:700">@Model.RefundType Refund</span>
+                <div style="margin-top:16px;font-size:28px;font-weight:800;color:var(--danger)">−@Model.RefundTotal.ToString("F2") EGP</div>
+                <div style="font-size:13px;color:var(--text-muted)">Total Refunded</div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom:20px">
+            <div class="card-header"><h3 class="card-title">Refund Information</h3></div>
+            <div class="card-body" style="padding:20px">
+                @foreach (var (label, value) in new[] {
+                    ("Refund #",       Model.RefundNumber),
+                    ("Original Order", Model.OriginalOrder?.OrderNumber ?? "—"),
+                    ("Processed By",   Model.ProcessedBy?.UserName ?? "—"),
+                    ("Method",         Model.RefundMethod.ToString()),
+                    ("Reason",         Model.Reason ?? "—"),
+                    ("Status",         Model.Status.ToString()),
+                })
+                {
+                    <div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border-color);font-size:13px">
+                        <span style="color:var(--text-muted)">@label</span>
+                        <span style="font-weight:600;text-align:right;max-width:180px">@value</span>
+                    </div>
+                }
+                @if (!string.IsNullOrEmpty(Model.Notes))
+                {
+                    <div style="margin-top:12px;padding:10px;background:var(--bg-secondary);border-radius:8px;font-size:13px;color:var(--text-muted)">
+                        <i class="fas fa-sticky-note me-2"></i>@Model.Notes
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><h3 class="card-title">Financial Breakdown</h3></div>
+            <div class="card-body" style="padding:20px">
+                <div style="display:flex;justify-content:space-between;padding:8px 0;font-size:14px;border-bottom:1px solid var(--border-color)">
+                    <span style="color:var(--text-muted)">Subtotal</span><span>@Model.RefundAmount.ToString("F2") EGP</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:8px 0;font-size:14px;border-bottom:1px solid var(--border-color)">
+                    <span style="color:var(--text-muted)">Tax Refunded</span><span>@Model.RefundTax.ToString("F2") EGP</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:14px 0;font-size:20px;font-weight:800;color:var(--danger)">
+                    <span>Refund Total</span><span>−@Model.RefundTotal.ToString("F2") EGP</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function printRefund() {
+
+            const items = [
+                @foreach (var item in Model.Items)
+                {
+                            var n = (!string.IsNullOrEmpty(item.ProductName) ? item.ProductName : item.OrderItem?.Product?.Name ?? "Item").Replace("\\", "\\\\").Replace("'", "\\'").Replace("\r", "").Replace("\n", "");
+                            var na = (!string.IsNullOrEmpty(item.ProductNameAr) ? item.ProductNameAr : item.OrderItem?.Product?.NameAr ?? "").Replace("\\", "\\\\").Replace("'", "\\'").Replace("\r", "").Replace("\n", "");
+                            @Html.Raw($"{{n:'{n}',na:'{na}',qty:{item.Quantity},up:{item.UnitPrice},tot:{item.TotalPrice}}},")
+                }
+            ];
+
+            const rows = items.map((i, idx) => `
+                <tr style="background:${idx%2===0?'#fff':'#fdf8f8'}">
+                    <td style="padding:9px 10px;text-align:right;border-bottom:1px solid #f0f0f0;vertical-align:middle">
+                        <div style="font-weight:700;color:#1a1a2e;font-size:12.5px">${i.n}</div>
+                        ${i.na ? `<div style="font-size:10px;color:#999;margin-top:1px">${i.na}</div>` : ''}
+                    </td>
+                    <td style="padding:9px 8px;text-align:center;border-bottom:1px solid #f0f0f0;vertical-align:middle">
+                        <span style="background:#1a1a2e;color:#fff;font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px">×${i.qty}</span>
+                    </td>
+                    <td style="padding:9px 8px;text-align:left;border-bottom:1px solid #f0f0f0;vertical-align:middle;color:#888;font-size:11.5px">
+                        ${i.up.toFixed(2)}
+                    </td>
+                    <td style="padding:9px 8px;text-align:left;border-bottom:1px solid #f0f0f0;vertical-align:middle;color:#e74c3c;font-weight:800;font-size:13px;white-space:nowrap">
+                        −${i.tot.toFixed(2)}
+                    </td>
+                </tr>`).join('');
+
+            const refNum   = '@Model.RefundNumber';
+            const origNum  = '@(Model.OriginalOrder?.OrderNumber ?? "—")';
+            const date     = '@Model.CreatedAt.ToString("yyyy/MM/dd")';
+            const time     = '@Model.CreatedAt.ToString("hh:mm tt")';
+            const rType    = '@Model.RefundType';
+            const method   = '@Model.RefundMethod';
+            const reason   = '@(Model.Reason ?? "—")';
+            const byUser   = '@(Model.ProcessedBy?.UserName ?? "—")';
+            const subtotal = '@Model.RefundAmount.ToString("F2")';
+            const tax      = '@Model.RefundTax.ToString("F2")';
+            const taxRate  = '@(Model.OriginalOrder?.TaxRate ?? 14)';
+            const total    = '@Model.RefundTotal.ToString("F2")';
+            const typeClr  = rType === 'Full' ? '#e74c3c' : '#f39c12';
+
+            const html = `<!DOCTYPE html>
+        <html dir="rtl" lang="ar">
+        <head>
+        <meta charset="utf-8">
+        <title>Refund ${refNum}</title>
+        <link rel="stylesheet" href="/css/fonts.css">
+        <style>
+        *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:'Cairo',Arial,sans-serif;background:#ececec;display:flex;justify-content:center;
+             align-items:flex-start;padding:24px 8px 48px;min-height:100vh;
+             -webkit-print-color-adjust:exact;print-color-adjust:exact}
+        .receipt{background:#fff;width:340px;border-radius:4px 4px 0 0;
+                 box-shadow:0 8px 48px rgba(0,0,0,0.18);overflow:hidden}
+
+        /* stripes */
+        .stripe{height:7px;background:linear-gradient(90deg,#c0392b 0%,#e74c3c 50%,#c0392b 100%)}
+        .stripe-bot{height:6px;background:repeating-linear-gradient(90deg,#e74c3c 0,#e74c3c 12px,#1a1a2e 12px,#1a1a2e 24px)}
+
+        /* header */
+        .hdr{background:linear-gradient(155deg,#1a1a2e 0%,#16213e 55%,#0f3460 100%);
+             padding:22px 22px 26px;text-align:center;position:relative}
+        .hdr::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:14px;
+                    background:#fff;border-radius:14px 14px 0 0}
+        .org{font-size:21px;font-weight:900;color:#fff;margin-bottom:3px}
+        .org-en{font-size:10px;color:rgba(255,255,255,.55);letter-spacing:2px;margin-bottom:14px}
+        .badge-refund{display:inline-flex;align-items:center;gap:6px;
+                      background:linear-gradient(135deg,#e74c3c,#c0392b);
+                      color:#fff;font-size:10.5px;font-weight:800;letter-spacing:1.5px;
+                      text-transform:uppercase;padding:6px 18px;border-radius:30px;
+                      box-shadow:0 4px 16px rgba(231,76,60,.45)}
+
+        /* body */
+        .body{padding:18px 20px 0}
+
+        /* info cells */
+        .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+        .ic{background:#f8f9fb;border-radius:7px;padding:7px 9px;border-right:3px solid #e74c3c}
+        .ic.full{grid-column:1/-1}
+        .ic-lbl{font-size:9px;font-weight:700;color:#bbb;text-transform:uppercase;letter-spacing:.8px;margin-bottom:3px}
+        .ic-val{font-size:12px;font-weight:700;color:#1a1a2e}
+        .ic-val.mono{font-family:monospace;color:#e74c3c;font-size:12px}
+
+        /* divider */
+        .div{display:flex;align-items:center;gap:8px;margin:12px 0;
+             color:#ccc;font-size:9.5px;letter-spacing:1.5px;font-weight:600}
+        .div::before,.div::after{content:'';flex:1;border-top:1px dashed #e0e0e0}
+
+        /* table */
+        .tbl{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:2px}
+        .tbl thead tr{background:#1a1a2e}
+        .tbl thead th{padding:7px 8px;font-size:9.5px;font-weight:700;letter-spacing:.8px;
+                      text-transform:uppercase;color:#fff}
+        .th-r{text-align:right}.th-c{text-align:center}.th-l{text-align:left}
+
+        /* totals */
+        .totals{background:#f8f9fb;border-radius:8px;padding:11px 13px;margin:12px 0}
+        .tr-row{display:flex;justify-content:space-between;align-items:center;
+                padding:4px 0;font-size:12px;color:#666;border-bottom:1px solid #eee}
+        .tr-row:last-child{border:none}
+        .tr-row.grand{border-top:2px solid #e74c3c;margin-top:8px;padding-top:10px;
+                      font-size:17px;font-weight:900;color:#e74c3c}
+
+        /* method */
+        .method{display:flex;align-items:center;justify-content:center;gap:6px;
+                background:#1a1a2e;color:#fff;font-size:11px;font-weight:700;
+                letter-spacing:.8px;padding:9px;border-radius:7px;margin:0 0 14px}
+
+        /* tear */
+        .tear{display:flex;align-items:center;overflow:hidden}
+        .tc{width:16px;height:16px;background:#ececec;border-radius:50%;flex-shrink:0;margin:0 -8px}
+        .tl{flex:1;border-top:2px dashed #e0e0e0}
+
+        /* footer */
+        .footer{text-align:center;padding:16px 20px 20px;background:#f8f9fb}
+        .footer p{font-size:11px;color:#999;line-height:2.1}
+        .footer strong{color:#1a1a2e;font-size:12px;display:block;margin-bottom:4px}
+
+        @@media print{body{background:#fff;padding:0}.receipt{box-shadow:none}}
+        </style>
+        </head>
+        <body>
+        <div class="receipt">
+
+          <div class="stripe"></div>
+
+          <div class="hdr">
+            <div class="org">نادي دار الطائرات</div>
+            <div class="org-en">AIRCRAFT FACTORY CLUB</div>
+            <div class="badge-refund">↩ إشعار استرجاع · REFUND RECEIPT</div>
+          </div>
+
+          <div class="body">
+
+            <div class="info-grid">
+              <div class="ic full">
+                <div class="ic-lbl">رقم الاسترجاع / Refund No.</div>
+                <div class="ic-val mono">${refNum}</div>
+              </div>
+              <div class="ic">
+                <div class="ic-lbl">الطلب الأصلي / Original</div>
+                <div class="ic-val mono">${origNum}</div>
+              </div>
+              <div class="ic">
+                <div class="ic-lbl">التاريخ / Date</div>
+                <div class="ic-val">${date}</div>
+              </div>
+              <div class="ic">
+                <div class="ic-lbl">الوقت / Time</div>
+                <div class="ic-val">${time}</div>
+              </div>
+              <div class="ic">
+                <div class="ic-lbl">النوع / Type</div>
+                <div class="ic-val" style="color:${typeClr}">${rType} Refund</div>
+              </div>
+              <div class="ic">
+                <div class="ic-lbl">كاشير / Cashier</div>
+                <div class="ic-val">${byUser}</div>
+              </div>
+              <div class="ic full">
+                <div class="ic-lbl">السبب / Reason</div>
+                <div class="ic-val">${reason}</div>
+              </div>
+            </div>
+
+            <div class="div">الأصناف · ITEMS</div>
+
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th class="th-r">الصنف</th>
+                  <th class="th-c">ك</th>
+                  <th class="th-l">سعر</th>
+                  <th class="th-l">المسترد</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+
+            <div class="div">الإجماليات · TOTALS</div>
+
+            <div class="totals">
+              <div class="tr-row">
+                <span>المجموع / Subtotal</span>
+                <strong>${subtotal} EGP</strong>
+              </div>
+              <div class="tr-row">
+                <span style="font-size:10px;color:#888">* الأسعار شاملة الضريبة</span>
+              </div>
+              <div class="tr-row grand">
+                <span>إجمالي المسترد / TOTAL</span>
+                <span>− ${total} EGP</span>
+              </div>
+            </div>
+
+            <div class="method">💳 &nbsp; طريقة الاسترداد · ${method}</div>
+
+          </div>
+
+          <div class="tear">
+            <div class="tc"></div>
+            <div class="tl"></div>
+            <div class="tc"></div>
+          </div>
+
+          <div class="footer">
+            <p>
+              <strong>نعتذر عن أي إزعاج</strong>
+              We sincerely apologize for any inconvenience.<br>
+              يسعدنا خدمتكم دائماً · Always happy to serve you.
+            </p>
+          </div>
+
+          <div class="stripe-bot"></div>
+
+        </div>
+        <script>window.onload=()=>window.print();<\/script>
+        </body></html>`;
+
+            const w = window.open('', '_blank', 'width=420,height=780,scrollbars=yes');
+            w.document.write(html);
+            w.document.close();
+        }
+    </script>
+}

@@ -1,0 +1,660 @@
+@{
+    ViewData["Title"] = "Return / Refund";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<style>
+    .refund-layout {
+        display: grid;
+        grid-template-columns: 1fr 400px;
+        gap: 24px;
+        align-items: start;
+    }
+
+    .order-card {
+        background: var(--card-bg);
+        border-radius: 16px;
+        padding: 0;
+        overflow: hidden;
+        box-shadow: var(--shadow);
+    }
+
+    .order-card-header {
+        padding: 20px 24px;
+        background: var(--bg-secondary);
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .refund-panel {
+        background: var(--card-bg);
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: var(--shadow);
+        position: sticky;
+        top: 24px;
+    }
+
+    .item-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 24px;
+        border-bottom: 1px solid var(--border-color);
+        transition: background 0.15s;
+    }
+
+        .item-row:last-child {
+            border-bottom: none;
+        }
+
+        .item-row:hover {
+            background: var(--bg-secondary);
+        }
+
+        .item-row.selected {
+            background: rgba(69,183,209,0.06);
+            border-left: 3px solid var(--primary);
+        }
+
+    .item-checkbox {
+        width: 20px;
+        height: 20px;
+        cursor: pointer;
+        accent-color: var(--primary);
+        flex-shrink: 0;
+    }
+
+    .item-info {
+        flex: 1;
+    }
+
+    .item-name {
+        font-weight: 600;
+        font-size: 14px;
+    }
+
+    .item-name-ar {
+        font-size: 12px;
+        color: var(--text-muted);
+        direction: rtl;
+    }
+
+    .item-qty-badge {
+        background: var(--primary-light);
+        color: var(--primary);
+        padding: 3px 10px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 700;
+    }
+
+    .qty-selector {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .qty-btn {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        border: 2px solid var(--primary);
+        background: transparent;
+        color: var(--primary);
+        font-size: 16px;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.15s;
+    }
+
+        .qty-btn:hover {
+            background: var(--primary);
+            color: white;
+        }
+
+    .qty-num {
+        width: 32px;
+        text-align: center;
+        font-weight: 700;
+        font-size: 15px;
+    }
+
+    .item-price {
+        font-weight: 600;
+        color: var(--danger);
+        min-width: 80px;
+        text-align: right;
+        font-size: 14px;
+    }
+
+    .lookup-section {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 24px;
+    }
+
+    .refund-summary-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 0;
+        font-size: 14px;
+        color: var(--text-muted);
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .refund-total-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 12px 0;
+        font-size: 20px;
+        font-weight: 800;
+        color: var(--danger);
+    }
+
+    .reason-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-bottom: 12px;
+    }
+
+    .reason-btn {
+        padding: 8px;
+        border-radius: 8px;
+        border: 2px solid var(--border-color);
+        background: transparent;
+        color: var(--text-muted);
+        font-size: 12px;
+        cursor: pointer;
+        font-family: inherit;
+        transition: all 0.2s;
+        text-align: center;
+    }
+
+        .reason-btn.active {
+            border-color: var(--primary);
+            background: var(--primary-light);
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+    .status-badge {
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+    }
+
+    @@media (max-width: 900px) {
+        .refund-layout {
+            grid-template-columns: 1fr;
+        }
+
+        .refund-panel {
+            position: static;
+        }
+    }
+</style>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title"><i class="fas fa-undo-alt me-2" style="color:var(--danger)"></i><span data-t="returnRefund">Return / Refund</span></h1>
+        <p class="page-subtitle" data-t="processCustomerReturns">Process customer returns using the order number</p>
+    </div>
+    <a href="/Cashier/History" class="btn btn-outline">
+        <i class="fas fa-history me-2"></i><span data-t="orderHistory">Order History</span>
+    </a>
+</div>
+
+<div class="refund-layout">
+
+    <!-- LEFT: Order lookup & items -->
+    <div>
+        <!-- Search Bar -->
+        <div class="card" style="margin-bottom:20px">
+            <div class="card-body" style="padding:20px">
+                <label style="font-weight:700;font-size:14px;display:block;margin-bottom:10px" data-t="enterOrderNumber">
+                    <i class="fas fa-search me-2" style="color:var(--primary)"></i>Enter Order Number
+                </label>
+                <div class="lookup-section">
+                    <input type="text" id="orderNumberInput" class="form-control"
+                           placeholder="e.g. ORD-20250428-001"
+                           style="font-family:monospace;font-size:15px;letter-spacing:1px;text-transform:uppercase"
+                           oninput="this.value=this.value.toUpperCase()"
+                           onkeydown="if(event.key==='Enter')lookupOrder()">
+                    <button class="btn btn-primary" onclick="lookupOrder()" id="lookupBtn" style="white-space:nowrap">
+                        <i class="fas fa-search me-2"></i><span data-t="lookup">Look Up</span>
+                    </button>
+                </div>
+                <div id="lookupError" style="display:none;color:var(--danger);font-size:13px;margin-top:8px;padding:10px;background:#FF6B6B11;border-radius:8px;border-left:3px solid var(--danger)"></div>
+            </div>
+        </div>
+
+        <!-- Order Found Card -->
+        <div id="orderCard" style="display:none">
+            <div class="order-card">
+                <div class="order-card-header">
+                    <div>
+                        <div style="font-size:20px;font-weight:800" id="orderNumDisplay"></div>
+                        <div style="font-size:12px;color:var(--text-muted);margin-top:2px" id="orderMetaDisplay"></div>
+                    </div>
+                    <div style="text-align:right">
+                        <div id="orderStatusBadge"></div>
+                        <div style="font-size:18px;font-weight:700;margin-top:6px" id="orderTotalDisplay"></div>
+                    </div>
+                </div>
+
+                <!-- Select All -->
+                <div style="padding:12px 24px;background:var(--bg-secondary);border-bottom:1px solid var(--border-color);display:flex;align-items:center;gap:10px">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text-muted)">
+                        <input type="checkbox" id="selectAll" style="width:18px;height:18px;accent-color:var(--primary)" onchange="toggleSelectAll(this.checked)">
+                        Select All Items
+                    </label>
+                    <span style="font-size:12px;color:var(--text-muted);margin-left:auto" id="selectedSummary">0 items selected</span>
+                </div>
+
+                <!-- Items List -->
+                <div id="itemsList"></div>
+            </div>
+        </div>
+
+        <!-- Empty state -->
+        <div id="emptyState" style="text-align:center;padding:80px 40px;color:var(--text-muted)">
+            <i class="fas fa-receipt fa-4x" style="opacity:0.15;margin-bottom:20px;display:block"></i>
+            <div style="font-size:16px;font-weight:600" data-t="searchForOrder">Search for an order above</div>
+            <div style="font-size:13px;margin-top:6px">Enter the order number from the customer's receipt</div>
+        </div>
+    </div>
+
+    <!-- RIGHT: Refund Panel -->
+    <div class="refund-panel">
+        <h3 style="font-size:16px;font-weight:700;margin-bottom:20px;color:var(--text-primary)">
+            <i class="fas fa-file-invoice-dollar me-2" style="color:var(--danger)"></i>Refund Details
+        </h3>
+
+        <!-- Reason -->
+        <div style="margin-bottom:16px">
+            <label style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px">Reason for Return</label>
+            <div class="reason-grid">
+                <button class="reason-btn active" data-reason="Customer Request" onclick="selectReason(this)">😕 Customer Request</button>
+                <button class="reason-btn" data-reason="Wrong Item" onclick="selectReason(this)">❌ Wrong Item</button>
+                <button class="reason-btn" data-reason="Quality Issue" onclick="selectReason(this)">⚠️ Quality Issue</button>
+                <button class="reason-btn" data-reason="Overcharged" onclick="selectReason(this)">💰 Overcharged</button>
+                <button class="reason-btn" data-reason="Order Error" onclick="selectReason(this)">📋 Order Error</button>
+                <button class="reason-btn" data-reason="Other" onclick="selectReason(this)">📝 Other</button>
+            </div>
+            <textarea id="refundNotes" class="form-control" rows="2" style="font-size:13px;margin-top:8px;resize:none"
+                      placeholder="Additional notes (optional)..."></textarea>
+        </div>
+
+        <!-- Refund Method -->
+        <div style="margin-bottom:20px">
+            <label style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px">Refund Method</label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                <button class="btn btn-outline pay-method active-pay" data-method="0" onclick="selectMethod(this)" style="font-size:13px;padding:10px">
+                    <i class="fas fa-money-bill me-1"></i>Cash
+                </button>
+                <button class="btn btn-outline pay-method" data-method="1" onclick="selectMethod(this)" style="font-size:13px;padding:10px">
+                    <i class="fas fa-credit-card me-1"></i>Card
+                </button>
+                <button class="btn btn-outline pay-method" data-method="2" onclick="selectMethod(this)" style="font-size:13px;padding:10px">
+                    <i class="fas fa-mobile-alt me-1"></i>Digital
+                </button>
+                <button class="btn btn-outline pay-method" data-method="3" onclick="selectMethod(this)" style="font-size:13px;padding:10px">
+                    <i class="fas fa-store me-1"></i>Store Credit
+                </button>
+            </div>
+        </div>
+
+        <!-- Totals -->
+        <div id="refundTotalsBox" style="background:var(--bg-secondary);border-radius:12px;padding:16px;margin-bottom:16px;display:none">
+            <div class="refund-summary-row"><span>Items Subtotal</span><span id="rSubtotal">0.00 EGP</span></div>
+            <div class="refund-summary-row"><span id="rTaxLabel">Tax</span><span id="rTax">0.00 EGP</span></div>
+            <div class="refund-total-row">
+                <span><i class="fas fa-arrow-down me-2"></i>Refund Total</span>
+                <span id="rTotal">0.00 EGP</span>
+            </div>
+        </div>
+
+        <!-- No selection state -->
+        <div id="noSelectionMsg" style="text-align:center;padding:30px;color:var(--text-muted);background:var(--bg-secondary);border-radius:12px;margin-bottom:16px">
+            <i class="fas fa-hand-pointer fa-2x" style="margin-bottom:10px;display:block;opacity:0.4"></i>
+            <div style="font-size:13px">Select items from the order to calculate refund amount</div>
+        </div>
+
+        <!-- Process Button -->
+        <button class="btn btn-danger w-100" id="processRefundBtn" onclick="processRefund()"
+                style="padding:16px;font-size:16px;font-weight:700;background:#FF6B6B;border-color:#FF6B6B" disabled>
+            <i class="fas fa-undo-alt me-2"></i>Process Refund
+        </button>
+        <button class="btn btn-outline w-100" onclick="resetForm()" style="margin-top:8px;font-size:13px">
+            <i class="fas fa-times me-2"></i>Clear / New Search
+        </button>
+    </div>
+</div>
+
+<!-- Success Modal -->
+<div class="modal-overlay" id="refundSuccessModal">
+    <div class="modal" style="max-width:460px;text-align:center">
+        <div class="modal-body" style="padding:40px 30px">
+            <div style="width:80px;height:80px;border-radius:50%;background:#FF6B6B22;color:#FF6B6B;font-size:36px;display:flex;align-items:center;justify-content:center;margin:0 auto 20px">
+                <i class="fas fa-undo-alt"></i>
+            </div>
+            <h3 style="font-size:22px;font-weight:800;margin-bottom:6px">Refund Processed!</h3>
+            <div style="font-size:26px;font-weight:700;color:var(--danger);margin-bottom:4px" id="successRefundNum"></div>
+            <div style="color:var(--text-muted);margin-bottom:6px" id="successRefundInfo"></div>
+            <div style="font-size:14px;color:var(--text-muted);margin-bottom:28px" id="successRefundType"></div>
+            <div style="display:flex;gap:10px;justify-content:center">
+                <button class="btn btn-outline" onclick="printRefundReceipt()" style="flex:1">
+                    <i class="fas fa-print me-2"></i>Print Receipt
+                </button>
+                <button class="btn btn-primary" onclick="Modal.close('refundSuccessModal');resetForm()" style="flex:1">
+                    <i class="fas fa-plus me-2"></i>New Refund
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        let currentOrder = null;
+        let selectedItems = {};   // { orderItemId: qty }
+        let selectedReason = 'Customer Request';
+        let selectedMethod = 0;
+        let lastRefund = null;
+
+        // ── Lookup ────────────────────────────────────────────────────
+        async function lookupOrder() {
+            const num = document.getElementById('orderNumberInput').value.trim();
+            if (!num) { showError('Please enter an order number'); return; }
+
+            const btn = document.getElementById('lookupBtn');
+            btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Looking up...';
+            hideError();
+
+            try {
+                const data = await API.get(`/Refund/LookupOrder?orderNumber=${encodeURIComponent(num)}`);
+                if (!data.success) { showError(data.message); return; }
+                currentOrder = data.order;
+                selectedItems = {};
+                renderOrder(data.order);
+                document.getElementById('orderCard').style.display = '';
+                document.getElementById('emptyState').style.display = 'none';
+                updateRefundPanel();
+            } catch(e) { showError('Failed to lookup order. Please try again.'); }
+
+            btn.disabled = false; btn.innerHTML = '<i class="fas fa-search me-2"></i><span data-t="lookup">Look Up</span>';
+        }
+
+        function showError(msg) {
+            const el = document.getElementById('lookupError');
+            el.textContent = msg; el.style.display = 'block';
+        }
+        function hideError() { document.getElementById('lookupError').style.display = 'none'; }
+
+        // ── Render Order ──────────────────────────────────────────────
+        function renderOrder(order) {
+            document.getElementById('orderNumDisplay').textContent = '#' + order.orderNumber;
+            document.getElementById('orderMetaDisplay').textContent =
+                `${new Date(order.createdAt).toLocaleString()} · ${order.orderType} · ${order.cashierName || '—'}`;
+            document.getElementById('orderTotalDisplay').textContent = order.total.toFixed(2) + ' EGP';
+
+            const statusColors = { Completed:'#4CAF50', PartialRefund:'#FF9800', Refunded:'#FF6B6B' };
+            const statusColor = statusColors[order.status] || '#aaa';
+            document.getElementById('orderStatusBadge').innerHTML =
+                `<span style="background:${statusColor}22;color:${statusColor};padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600">${order.status}</span>`;
+
+            const list = document.getElementById('itemsList');
+            list.innerHTML = order.items.map(item => `
+                <div class="item-row" id="row-${item.id}" data-id="${item.id}">
+                    <input type="checkbox" class="item-checkbox" id="chk-${item.id}"
+                           onchange="toggleItem(${item.id}, this.checked)">
+                    <label for="chk-${item.id}" style="flex:1;cursor:pointer;margin:0">
+                        <div class="item-name">${item.productName}</div>
+                        <div class="item-name-ar">${item.productNameAr || ''}</div>
+                    </label>
+                    <div class="item-qty-badge">×${item.availableToRefund}</div>
+                    <div class="qty-selector" id="qtyCtrl-${item.id}" style="display:none">
+                        <button class="qty-btn" onclick="changeRefundQty(${item.id}, -1)">−</button>
+                        <span class="qty-num" id="rqty-${item.id}">1</span>
+                        <button class="qty-btn" onclick="changeRefundQty(${item.id}, 1)">+</button>
+                    </div>
+                    <div class="item-price" id="price-${item.id}">−${item.totalPrice.toFixed(2)} EGP</div>
+                </div>`).join('');
+
+            if (!order.items.length) {
+                list.innerHTML = `<div style="padding:40px;text-align:center;color:var(--text-muted)">
+                    <i class="fas fa-check-circle fa-2x" style="color:#4CAF50;margin-bottom:10px;display:block"></i>
+                    All items in this order have already been refunded.</div>`;
+                document.getElementById('selectAll').disabled = true;
+            }
+        }
+
+        function toggleItem(itemId, checked) {
+            const item = currentOrder.items.find(i => i.id === itemId);
+            const row = document.getElementById(`row-${itemId}`);
+            const qtyCtrl = document.getElementById(`qtyCtrl-${itemId}`);
+
+            if (checked) {
+                selectedItems[itemId] = 1;
+                document.getElementById(`rqty-${itemId}`).textContent = '1';
+                row.classList.add('selected');
+                qtyCtrl.style.display = 'flex';
+            } else {
+                delete selectedItems[itemId];
+                row.classList.remove('selected');
+                qtyCtrl.style.display = 'none';
+            }
+            updateRefundPanel();
+            syncSelectAll();
+        }
+
+        function changeRefundQty(itemId, delta) {
+            const item = currentOrder.items.find(i => i.id === itemId);
+            const current = selectedItems[itemId] || 1;
+            const newQty = Math.max(1, Math.min(item.availableToRefund, current + delta));
+            selectedItems[itemId] = newQty;
+            document.getElementById(`rqty-${itemId}`).textContent = newQty;
+            const lineTotal = item.unitPrice * newQty;
+            document.getElementById(`price-${itemId}`).textContent = `−${lineTotal.toFixed(2)} EGP`;
+            updateRefundPanel();
+        }
+
+        function toggleSelectAll(checked) {
+            if (!currentOrder) return;
+            currentOrder.items.forEach(item => {
+                const chk = document.getElementById(`chk-${item.id}`);
+                if (chk && chk.checked !== checked) { chk.checked = checked; toggleItem(item.id, checked); }
+            });
+        }
+
+        function syncSelectAll() {
+            if (!currentOrder) return;
+            const total = currentOrder.items.length;
+            const selected = Object.keys(selectedItems).length;
+            const allChk = document.getElementById('selectAll');
+            allChk.checked = selected === total && total > 0;
+            allChk.indeterminate = selected > 0 && selected < total;
+            document.getElementById('selectedSummary').textContent = `${selected} of ${total} items selected`;
+        }
+
+        function updateRefundPanel() {
+            const selectedIds = Object.keys(selectedItems);
+            const hasSelection = selectedIds.length > 0;
+            const totalsBox = document.getElementById('refundTotalsBox');
+            const noSelMsg = document.getElementById('noSelectionMsg');
+            const processBtn = document.getElementById('processRefundBtn');
+
+            if (!currentOrder || !hasSelection) {
+                totalsBox.style.display = 'none'; noSelMsg.style.display = 'block'; processBtn.disabled = true; return;
+            }
+
+            totalsBox.style.display = 'block'; noSelMsg.style.display = 'none';
+
+            let subtotal = 0;
+            selectedIds.forEach(id => {
+                const item = currentOrder.items.find(i => i.id === parseInt(id));
+                if (item) subtotal += item.unitPrice * selectedItems[id];
+            });
+
+            // Prices already include tax
+            const tax = 0;
+            const total = subtotal;
+
+            document.getElementById('rSubtotal').textContent = subtotal.toFixed(2) + ' EGP';
+            document.getElementById('rTaxLabel').textContent = 'الأسعار شاملة الضريبة';
+            document.getElementById('rTax').textContent = '';
+            document.getElementById('rTotal').textContent = total.toFixed(2) + ' EGP';
+            processBtn.disabled = false;
+        }
+
+        // ── Reason & Method ───────────────────────────────────────────
+        function selectReason(btn) {
+            document.querySelectorAll('.reason-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            selectedReason = btn.dataset.reason;
+        }
+
+        function selectMethod(btn) {
+            document.querySelectorAll('.pay-method').forEach(b => {
+                b.style.background = 'transparent'; b.style.color = ''; b.style.borderColor = 'var(--border-color)';
+            });
+            btn.style.background = 'var(--danger)'; btn.style.color = 'white'; btn.style.borderColor = 'var(--danger)';
+            selectedMethod = parseInt(btn.dataset.method);
+        }
+
+        // ── Process Refund ────────────────────────────────────────────
+        async function processRefund() {
+            if (!currentOrder || !Object.keys(selectedItems).length) return;
+            if (!confirm('Are you sure you want to process this refund? This action cannot be undone.')) return;
+
+            const btn = document.getElementById('processRefundBtn');
+            btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
+
+            const payload = {
+                orderId: currentOrder.id,
+                items: Object.entries(selectedItems).map(([id, qty]) => ({
+                    orderItemId: parseInt(id), quantity: qty
+                })),
+                refundMethod: selectedMethod,
+                reason: selectedReason,
+                notes: document.getElementById('refundNotes').value || null
+            };
+
+            try {
+                const res = await API.post('/Refund/ProcessRefund', payload);
+                if (res.success) {
+                    lastRefund = res;
+                    document.getElementById('successRefundNum').textContent = '#' + res.refundNumber;
+                    document.getElementById('successRefundInfo').textContent = res.refundTotal.toFixed(2) + ' EGP refunded';
+                    document.getElementById('successRefundType').textContent = res.refundType === 'Full' ? '✅ Full Refund' : '⚠️ Partial Refund';
+                    Modal.open('refundSuccessModal');
+                    // Re-load order to show updated status
+                    await lookupOrder();
+                } else {
+                    Toast.error(res.message || 'Failed to process refund');
+                }
+            } catch(e) { Toast.error('Error processing refund'); }
+
+            btn.disabled = false; btn.innerHTML = '<i class="fas fa-undo-alt me-2"></i>Process Refund';
+        }
+
+        function printRefundReceipt() {
+            if (!lastRefund || !currentOrder) return;
+
+            const rows = Object.entries(selectedItems).map(([id, qty]) => {
+                const item = currentOrder.items.find(i => i.id === parseInt(id));
+                if (!item) return '';
+                const name   = item.productName   || 'Item';
+                const nameAr = item.productNameAr || '';
+                const lineTotal = (item.unitPrice * qty).toFixed(2);
+                return `<tr>
+                    <td style="padding:5px 4px;border-bottom:1px solid #eee">
+                        <span style="font-weight:600">${name}</span>
+                        ${nameAr ? `<br><span style="font-size:10px;color:#888;direction:rtl">${nameAr}</span>` : ''}
+                        <br><span style="font-size:10px;color:#aaa">${item.unitPrice.toFixed(2)} × ${qty}</span>
+                    </td>
+                    <td style="text-align:center;padding:5px 4px;border-bottom:1px solid #eee;vertical-align:top">×${qty}</td>
+                    <td style="text-align:right;padding:5px 4px;border-bottom:1px solid #eee;color:#e53e3e;font-weight:600;vertical-align:top;white-space:nowrap">−${lineTotal}</td>
+                </tr>`;
+            }).join('');
+
+            // Calculate subtotal and tax for print
+            const subtotal = Object.entries(selectedItems).reduce((sum, [id, qty]) => {
+                const item = currentOrder.items.find(i => i.id === parseInt(id));
+                return sum + (item ? item.unitPrice * qty : 0);
+            }, 0);
+            // Tax already included
+            const tax = 0;
+
+            const html = `
+                <div style="font-family:'Cairo',Arial,sans-serif;max-width:300px;margin:0 auto;padding:12px;font-size:12px">
+                    <div style="text-align:center;padding-bottom:10px;margin-bottom:10px;border-bottom:2px dashed #333">
+                        <div style="font-size:18px;font-weight:800">نادي دار الطائرات</div>
+                        <div style="font-size:12px;color:#555;margin-top:2px">Aircraft Factory Club</div>
+                        <div style="margin-top:8px;padding:4px 14px;background:#fee2e2;color:#e53e3e;border-radius:20px;font-weight:700;font-size:12px;display:inline-block">
+                            🔄 REFUND RECEIPT
+                        </div>
+                    </div>
+                    <div style="margin-bottom:12px;line-height:1.9">
+                        <div><b>Refund #:</b> ${lastRefund.refundNumber}</div>
+                        <div><b>Original Order:</b> ${currentOrder.orderNumber}</div>
+                        <div><b>Date:</b> ${new Date().toLocaleString('en-GB')}</div>
+                        <div><b>Type:</b> ${lastRefund.refundType} Refund</div>
+                        <div><b>Reason:</b> ${selectedReason}</div>
+                        <div><b>Cashier:</b> ${currentOrder.cashierName || '—'}</div>
+                    </div>
+                    <table style="width:100%;border-collapse:collapse;border-top:1px dashed #333;border-bottom:1px dashed #333">
+                        <thead>
+                            <tr style="background:#f9f9f9">
+                                <th style="text-align:left;padding:6px 4px;font-size:11px;border-bottom:1px solid #ccc">Item</th>
+                                <th style="text-align:center;padding:6px 4px;font-size:11px;border-bottom:1px solid #ccc">Qty</th>
+                                <th style="text-align:right;padding:6px 4px;font-size:11px;border-bottom:1px solid #ccc">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                    <div style="margin-top:10px;line-height:2">
+                        <div style="display:flex;justify-content:space-between">
+                            <span>Subtotal:</span><span>${subtotal.toFixed(2)} EGP</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between">
+                            <span style='font-size:10px;color:#888'>* الأسعار شاملة الضريبة</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;font-weight:800;font-size:14px;border-top:2px dashed #333;margin-top:6px;padding-top:6px;color:#e53e3e">
+                            <span>REFUND TOTAL:</span><span>−${lastRefund.refundTotal.toFixed(2)} EGP</span>
+                        </div>
+                    </div>
+                    <div style="text-align:center;margin-top:14px;font-size:11px;border-top:1px dashed #333;padding-top:10px;line-height:2;color:#555">
+                        <div>We apologize for any inconvenience</div>
+                        <div>نعتذر عن أي إزعاج</div>
+                    </div>
+                </div>`;
+            printInvoice(html);
+        }
+
+        function resetForm() {
+            currentOrder = null; selectedItems = {};
+            document.getElementById('orderNumberInput').value = '';
+            document.getElementById('orderCard').style.display = 'none';
+            document.getElementById('emptyState').style.display = 'block';
+            document.getElementById('refundNotes').value = '';
+            hideError(); updateRefundPanel();
+        }
+
+        // Init: activate first method button
+        document.addEventListener('DOMContentLoaded', () => {
+            selectMethod(document.querySelector('.pay-method'));
+        });
+    </script>
+}

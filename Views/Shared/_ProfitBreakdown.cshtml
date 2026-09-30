@@ -1,0 +1,75 @@
+@model RestaurantERP.Controllers.BreakdownVm
+@{
+    string M(decimal d) => d.ToString("N2");
+    string P(decimal d) => d.ToString("N1") + "%";
+    var maxRev = Model.Rows.Any() ? Model.Rows.Max(r => r.Revenue) : 0;
+}
+
+<div class="card" style="margin-bottom:20px">
+    <div class="card-header"><h3 class="card-title">@Model.Title</h3></div>
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>@Model.ColLabel</th>
+                    <th>@Model.QtyLabel</th>
+                    <th>الإيراد</th>
+                    @if (Model.ShowProfit)
+                    {
+                        <th>التكلفة</th>
+                        <th>الربح</th>
+                        <th>الهامش</th>
+                    }
+                    <th>نسبة من الإجمالي</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!Model.Rows.Any())
+                {
+                    <tr><td colspan="@(Model.ShowProfit ? 7 : 4)" style="text-align:center;color:var(--text-muted)">لا توجد بيانات في هذه الفترة</td></tr>
+                }
+                @foreach (var r in Model.Rows)
+                {
+                    var share = Model.Total > 0 ? r.Revenue / Model.Total * 100 : 0;
+                    var bar = maxRev > 0 ? (double)(r.Revenue / maxRev) * 100 : 0;
+                    <tr>
+                        <td style="font-weight:600">@r.Label</td>
+                        <td>@r.Quantity</td>
+                        <td><strong>@M(r.Revenue)</strong></td>
+                        @if (Model.ShowProfit)
+                        {
+                            <td style="color:#FF9800">@M(r.Cost)</td>
+                            <td style="color:@(r.Profit >= 0 ? "#16A34A" : "#DC2626");font-weight:700">@M(r.Profit)</td>
+                            <td style="color:@(r.Margin >= 0 ? "#16A34A" : "#DC2626")">@P(r.Margin)</td>
+                        }
+                        <td style="min-width:130px">
+                            <div style="display:flex;align-items:center;gap:6px">
+                                <div style="flex:1;height:6px;background:var(--bg-secondary);border-radius:3px;overflow:hidden">
+                                    <div style="width:@bar.ToString("F1")%;height:100%;background:var(--primary)"></div>
+                                </div>
+                                <span style="font-size:11px;min-width:38px">@P(share)</span>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+            @if (Model.Rows.Any())
+            {
+                <tfoot>
+                    <tr>
+                        <td style="font-weight:900">الإجمالي</td>
+                        <td style="font-weight:900">@Model.Rows.Sum(r => r.Quantity)</td>
+                        <td style="font-weight:900">@M(Model.Rows.Sum(r => r.Revenue))</td>
+                        @if (Model.ShowProfit)
+                        {
+                            <td style="font-weight:900">@M(Model.Rows.Sum(r => r.Cost))</td>
+                            <td style="font-weight:900">@M(Model.Rows.Sum(r => r.Profit))</td>
+                            <td></td>
+                        }
+                        <td></td>
+                    </tr>
+                </tfoot>
+            }
+        </table>
+    </div>
+</div>

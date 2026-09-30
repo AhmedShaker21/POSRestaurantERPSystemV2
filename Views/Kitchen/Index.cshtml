@@ -1,0 +1,254 @@
+@{
+    ViewData["Title"] = "شاشة المطبخ";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var branch      = ViewBag.Branch      as RestaurantERP.Models.Branch;
+    var allBranches = ViewBag.AllBranches as List<RestaurantERP.Models.Branch> ?? new();
+    var isAdmin     = (bool)(ViewBag.IsAdmin ?? false);
+}
+
+@if (branch != null)
+{
+    <div style="display:flex;align-items:center;gap:12px;padding:12px 18px;
+                background:linear-gradient(135deg,@branch.ColorHex,@(branch.ColorHex)bb);
+                border-radius:14px;margin-bottom:16px;color:#fff;box-shadow:0 4px 16px @(branch.ColorHex)44">
+        <span style="font-size:28px">@branch.Icon</span>
+        <div>
+            <div style="font-weight:900;font-size:16px">@branch.NameAr</div>
+            <div style="font-size:11px;opacity:.8">@branch.Name</div>
+        </div>
+        <div style="margin-right:auto;font-size:12px;background:rgba(255,255,255,.2);
+                    padding:4px 12px;border-radius:20px;font-weight:700">
+            🍽️ شاشة المطبخ
+        </div>
+    </div>
+}
+
+@if (isAdmin && allBranches.Count > 1)
+{
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;
+                padding:10px 16px;background:var(--card-bg);border:1px solid var(--border-color);
+                border-radius:12px">
+        <i class="fas fa-code-branch" style="color:var(--primary)"></i>
+        <span style="font-size:12px;font-weight:700;color:var(--text-muted);white-space:nowrap">تحديد الفرع:</span>
+        <select onchange="window.location='/Kitchen/Index?branchId='+this.value"
+                class="form-control" style="flex:1;max-width:280px;height:38px;font-size:13px;border-radius:10px">
+            @foreach (var b in allBranches)
+            {
+                <option value="@b.Id" selected="@(branch?.Id == b.Id)">@b.Icon @b.NameAr</option>
+            }
+        </select>
+        @if (branch != null)
+        {
+            <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:12px;
+                         background:@(branch.ColorHex)18;color:@branch.ColorHex;
+                         border:1px solid @(branch.ColorHex)44">
+                @branch.Icon @branch.NameAr
+            </span>
+        }
+    </div>
+}
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">شاشة المطبخ</h1>
+        <p class="page-subtitle" id="lastRefresh">يتم التحديث تلقائياً...</p>
+    </div>
+    <div class="d-flex gap-2 align-items-center">
+        <span class="badge badge-success" id="liveIndicator">
+            <i class="fas fa-circle" style="font-size:8px;animation:pulse 2s infinite"></i>
+            <span style="margin-right:4px">مباشر</span>
+        </span>
+        <button class="btn btn-outline" onclick="loadOrders()">
+            <i class="fas fa-sync me-2"></i>تحديث
+        </button>
+    </div>
+</div>
+
+<!-- تبويبات الفلتر -->
+<div class="d-flex gap-2" style="margin-bottom:24px;flex-wrap:wrap">
+    @{
+        var tabs = new[] {
+            ("all",      "الكل",      "fa-th",           "var(--primary)"),
+            ("Pending",  "جديد",      "fa-clock",        "#FF6B6B"),
+            ("Preparing","قيد التحضير","fa-fire",         "#FF9800"),
+            ("Ready",    "جاهز",      "fa-check",        "#4CAF50")
+        };
+    }
+    @foreach (var (val, label, icon, color) in tabs)
+    {
+        <button class="btn @(val=="all"?"btn-primary":"btn-outline") kitchen-tab"
+                data-filter="@val" onclick="setFilter('@val', this)" style="border-color:@color;@(val!="all"?$"color:{color}":"")">
+            <i class="fas @icon me-2"></i>
+            <span>@label</span>
+            <span class="badge" id="count-@val" style="background:@color;margin-right:6px;font-size:10px">0</span>
+        </button>
+    }
+</div>
+
+<div id="ordersContainer" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;min-height:300px">
+    <div style="grid-column:1/-1;text-align:center;padding:80px;color:var(--text-muted)">
+        <i class="fas fa-spinner fa-spin fa-3x" style="margin-bottom:16px"></i>
+        <div>جاري تحميل الطلبات...</div>
+    </div>
+</div>
+
+<style>
+@@keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.4} }
+.kitchen-card { animation:slideIn 0.3s ease; }
+@@keyframes slideIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+.timer-urgent { color:#FF6B6B !important; animation:pulse 1s infinite; }
+</style>
+
+@section Scripts {
+<script>
+let allOrders = [];
+let currentFilter = 'all';
+let refreshTimer;
+
+const statusConfig = {
+    'Pending':   { color:'#FF6B6B', icon:'fa-clock',        label:'طلب جديد',     next:'Preparing', nextLabel:'بدء التحضير',  nextIcon:'fa-fire' },
+    'Preparing': { color:'#FF9800', icon:'fa-fire',          label:'قيد التحضير',  next:'Ready',     nextLabel:'تم التحضير',   nextIcon:'fa-check' },
+    'Ready':     { color:'#4CAF50', icon:'fa-check-circle',  label:'جاهز!',        next:'Completed', nextLabel:'تسليم الطلب',  nextIcon:'fa-flag-checkered' }
+};
+
+async function loadOrders() {
+    try {
+        // Pass current branchId so Admin gets correct branch orders
+        const urlBranchId = new URLSearchParams(window.location.search).get('branchId') || '';
+        const endpoint = urlBranchId ? `/Kitchen/GetPendingOrders?branchId=${urlBranchId}` : '/Kitchen/GetPendingOrders';
+        const data = await API.get(endpoint);
+        allOrders = data.orders || [];
+        renderOrders();
+        updateCounts();
+        document.getElementById('lastRefresh').textContent = `آخر تحديث: ${new Date().toLocaleTimeString('ar-EG')}`;
+    } catch(e) {
+        console.error('فشل تحميل الطلبات:', e);
+    }
+}
+
+function updateCounts() {
+    document.getElementById('count-all').textContent      = allOrders.length;
+    document.getElementById('count-Pending').textContent  = allOrders.filter(o => o.status === 'Pending').length;
+    document.getElementById('count-Preparing').textContent= allOrders.filter(o => o.status === 'Preparing').length;
+    document.getElementById('count-Ready').textContent    = allOrders.filter(o => o.status === 'Ready').length;
+}
+
+function setFilter(filter, btn) {
+    currentFilter = filter;
+    document.querySelectorAll('.kitchen-tab').forEach(t => { t.className = t.className.replace('btn-primary','btn-outline'); });
+    btn.className = btn.className.replace('btn-outline','btn-primary');
+    renderOrders();
+}
+
+function renderOrders() {
+    const filtered  = currentFilter === 'all' ? allOrders : allOrders.filter(o => o.status === currentFilter);
+    const container = document.getElementById('ordersContainer');
+
+    if (filtered.length === 0) {
+        container.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:80px;color:var(--text-muted)">
+            <i class="fas fa-check-circle fa-3x" style="color:#4CAF50;margin-bottom:16px;display:block"></i>
+            <div style="font-size:18px;font-weight:600">لا توجد طلبات!</div>
+            <div style="font-size:14px;margin-top:8px">لا يوجد طلبات معلقة حالياً</div>
+        </div>`;
+        return;
+    }
+
+    const nowMs = Date.now();
+    container.innerHTML = filtered.map(order => {
+        // Use server-computed elapsedSeconds — avoids all timezone issues
+        const elapsedSec = (order.elapsedSeconds || 0);
+        const elapsed    = Math.floor(elapsedSec / 60);
+        const isUrgent   = elapsed >= 15;
+        // Store the computed start time so the client ticker can count up
+        const startMs    = nowMs - (elapsedSec * 1000);
+        const cfg       = statusConfig[order.status] || { color:'#aaa', icon:'fa-circle', label:order.status, next:null };
+
+        // Only show items that need kitchen preparation — skip instant items
+        const kitchenItems = (order.items || []).filter(item => !item.skipKitchen);
+        const skippedCount = (order.items || []).length - kitchenItems.length;
+
+        const itemsHtml = kitchenItems.map(item => `
+            <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border-color);align-items:center">
+                <div>
+                    <div style="display:flex;align-items:center;gap:6px">
+                        <span style="font-weight:600">${item.productNameAr || item.productName}</span>
+                    </div>
+                    ${item.notes ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px">⚠ ${item.notes}</div>` : ''}
+                </div>
+                <div style="background:${cfg.color}22;color:${cfg.color};font-weight:700;padding:4px 10px;border-radius:20px;font-size:14px">×${item.quantity}</div>
+            </div>`).join('') +
+            (skippedCount > 0 ? `
+            <div style="margin-top:8px;padding:6px 10px;background:#22c55e12;border:1px solid #22c55e33;border-radius:8px;font-size:11px;color:#16a34a;font-weight:700">
+                <i class="fas fa-bolt me-1"></i>${skippedCount} عنصر فوري — يُسلَّم مباشرة للعميل
+            </div>` : '');
+
+        const orderTypeAr = { 'DineIn':'صالة', 'Takeaway':'تيك أواي', 'Delivery':'توصيل' };
+        const typeLabel   = orderTypeAr[order.orderType] || order.orderType;
+
+        const mixedBanner = (!order.allSkipKitchen && order.items.some(i => i.skipKitchen))
+            ? `<div style="background:#f59e0b22;border:1px solid #f59e0b55;border-radius:8px;padding:7px 10px;margin-bottom:10px;font-size:12px;font-weight:700;color:#f59e0b;display:flex;align-items:center;gap:6px">
+                 <i class="fas fa-triangle-exclamation"></i>
+                 طلب مختلط — العناصر المعتمة تُقدَّم فوراً
+               </div>`
+            : '';
+
+        return `
+            <div class="card kitchen-card" style="border-top:4px solid ${cfg.color}">
+                <div style="padding:16px">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+                        <div>
+                            <div style="font-size:22px;font-weight:800;color:${cfg.color}">#${order.orderNumber}</div>
+                            <div style="font-size:12px;color:var(--text-muted)">${typeLabel}${order.tableNumber ? ` · طاولة ${order.tableNumber}` : ''}</div>
+                        </div>
+                        <div style="text-align:left">
+                            <div id="timer-${order.id}"
+                                 class="${isUrgent ? 'timer-urgent' : ''}"
+                                 data-ts="${startMs}"
+                                 style="font-weight:700;font-size:18px;color:${isUrgent ? '#FF6B6B' : 'var(--text-primary)'}">
+                                <i class="fas fa-clock me-1"></i><span class="elapsed-min">${elapsed}</span>م
+                            </div>
+                            <span style="background:${cfg.color}22;color:${cfg.color};font-size:11px;padding:2px 8px;border-radius:20px">
+                                <i class="fas ${cfg.icon} me-1"></i>${cfg.label}
+                            </span>
+                        </div>
+                    </div>
+                    ${mixedBanner}
+                    <div style="margin-bottom:12px">${itemsHtml}</div>
+                    ${cfg.next ? `<button class="btn btn-primary w-100" style="background:${cfg.color};border-color:${cfg.color}" onclick="updateStatus(${order.id},'${cfg.next}')">
+                        <i class="fas ${cfg.nextIcon} me-2"></i>${cfg.nextLabel}
+                    </button>` : ''}
+                </div>
+            </div>`;
+    }).join('');
+}
+
+async function updateStatus(orderId, newStatus) {
+    try {
+        const res = await API.post('/Kitchen/UpdateStatus', { orderId, status: newStatus });
+        if (res.success) {
+            if (newStatus === 'Completed') Toast.success('تم تسليم الطلب!');
+            await loadOrders();
+        } else Toast.error(res.message || 'فشل تحديث الحالة');
+    } catch(e) { Toast.error('حدث خطأ أثناء تحديث الحالة'); }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadOrders();
+    refreshTimer = setInterval(loadOrders, 30000);
+
+    // Tick every 10 seconds — updates minute display smoothly
+    setInterval(() => {
+        document.querySelectorAll('[data-ts]').forEach(el => {
+            const ts      = parseInt(el.dataset.ts);
+            if (!ts) return;
+            const elapsed = Math.max(0, Math.floor((Date.now() - ts) / 60000));
+            const isUrgent= elapsed >= 15;
+            const span    = el.querySelector('.elapsed-min');
+            if (span) span.textContent = String(elapsed);
+            el.style.color = isUrgent ? '#FF6B6B' : 'var(--text-primary)';
+            el.classList.toggle('timer-urgent', isUrgent);
+        });
+    }, 10000); // every 10 seconds so minute transitions are caught quickly
+});
+</script>
+}

@@ -1,0 +1,176 @@
+@{
+    ViewData["Title"] = "Manager Dashboard";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title" data-t="managerDashboard">Manager Dashboard</h1>
+        <p class="page-subtitle" id="currentDate">Loading...</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/Manager/Reports" class="btn btn-outline"><i class="fas fa-chart-bar me-2"></i><span data-t="reports">Reports</span></a>
+        <a href="/Manager/Orders" class="btn btn-primary"><i class="fas fa-receipt me-2"></i><span data-t="orders">All Orders</span></a>
+    </div>
+</div>
+
+<!-- KPI Cards -->
+<div class="stats-grid" id="managerKPIs" style="margin-bottom:24px">
+    @{
+        var kpiItems = new[] {
+            ("Today's Sales", "fa-coins", "#45B7D1"),
+            ("Today's Orders", "fa-receipt", "#4CAF50"),
+            ("Active Shifts", "fa-user-clock", "#FF9800"),
+            ("Pending Orders", "fa-clock", "#FF6B6B")
+        };
+    }
+    @foreach (var (label, icon, color) in kpiItems)
+    {
+        <div class="stat-card">
+            <div class="stat-icon" style="background:@(color)22;color:@color"><i class="fas @icon"></i></div>
+            <div class="stat-value" style="--kpi-color:@color">—</div>
+            <div class="stat-label">@label</div>
+        </div>
+    }
+</div>
+
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:24px;margin-bottom:24px">
+    <!-- Revenue Chart -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title" data-t="weeklyRevenue">Weekly Revenue</h3>
+        </div>
+        <div class="card-body" style="padding:20px">
+            <canvas id="weeklyChart" height="110"></canvas>
+        </div>
+    </div>
+
+    <!-- Active Staff -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title" data-t="activeStaff">Active Staff</h3>
+            <span class="badge badge-success" id="staffCount">0</span>
+        </div>
+        <div class="card-body" style="padding:16px" id="staffList">
+            <div style="text-align:center;color:var(--text-muted);padding:20px">
+                <i class="fas fa-spinner fa-spin fa-2x"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+    <!-- Recent Orders -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title" data-t="recentOrders">Recent Orders</h3>
+            <a href="/Manager/Orders" class="btn btn-sm btn-outline" data-t="viewAll">View All</a>
+        </div>
+        <div class="card-body" style="padding:0" id="recentOrdersList">
+            <div style="text-align:center;color:var(--text-muted);padding:40px"><i class="fas fa-spinner fa-spin fa-2x"></i></div>
+        </div>
+    </div>
+
+    <!-- Top Products -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title" data-t="todaysTopProducts">Today's Top Products</h3>
+        </div>
+        <div class="card-body" style="padding:20px" id="todayTopProducts">
+            <div style="text-align:center;color:var(--text-muted);padding:40px"><i class="fas fa-spinner fa-spin fa-2x"></i></div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+let weeklyChart;
+
+async function loadManagerDashboard() {
+    try {
+        const data = await API.get('/Admin/GetDashboardStats');
+        if (!data) return;
+
+        // Update KPI values
+        const kpiCards = document.querySelectorAll('#managerKPIs .stat-value');
+        if (kpiCards[0]) kpiCards[0].textContent = `${(data.todaySales||0).toFixed(0)} EGP`;
+        if (kpiCards[1]) kpiCards[1].textContent = data.todayOrders || 0;
+        if (kpiCards[2]) kpiCards[2].textContent = data.activeShifts || 0;
+        if (kpiCards[3]) kpiCards[3].textContent = data.pendingOrders || 0;
+
+        // Weekly chart
+        if (weeklyChart) weeklyChart.destroy();
+        const chartData = data.dailySales || [];
+        weeklyChart = createChart('weeklyChart', {
+            type: 'bar',
+            data: {
+                labels: chartData.slice(-7).map(d => d.date),
+                datasets: [{ label: 'Revenue (EGP)', data: chartData.slice(-7).map(d => d.revenue), backgroundColor: 'rgba(69,183,209,0.6)', borderColor: '#45B7D1', borderWidth: 2, borderRadius: 6 }]
+            },
+            options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+        });
+
+        // Top products
+        const topProds = data.topProducts || [];
+        const maxQty = topProds[0]?.totalQty || 1;
+        document.getElementById('todayTopProducts').innerHTML = topProds.slice(0,6).map((p,i) => `
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                <div style="width:22px;height:22px;border-radius:50%;background:var(--primary-light);color:var(--primary);font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0">${i+1}</div>
+                <div style="flex:1">
+                    <div style="font-weight:600;font-size:13px;margin-bottom:3px">${p.productName}</div>
+                    <div style="background:var(--bg-secondary);border-radius:4px;height:5px">
+                        <div style="width:${(p.totalQty/maxQty*100).toFixed(0)}%;background:var(--primary);height:100%;border-radius:4px"></div>
+                    </div>
+                </div>
+                <div style="font-size:12px;font-weight:600;flex-shrink:0">${p.totalQty}</div>
+            </div>`).join('') || '<div style="color:var(--text-muted);text-align:center;padding:20px">No data yet</div>';
+
+    } catch(e) {
+        console.error('Dashboard load error:', e);
+    }
+
+    // Load recent orders
+    try {
+        const ordersData = await API.get('/Admin/GetRecentOrders?count=8');
+        const orders = ordersData.orders || [];
+        document.getElementById('recentOrdersList').innerHTML = orders.length ? orders.map(o => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 20px;border-bottom:1px solid var(--border-color)">
+                <div>
+                    <div style="font-weight:600;font-size:13px">#${o.orderNumber}</div>
+                    <div style="font-size:11px;color:var(--text-muted)">${o.orderType} · ${o.itemCount} items</div>
+                </div>
+                <div style="text-align:right">
+                    <div style="font-weight:600">${o.total?.toFixed(2)} EGP</div>
+                    <span style="font-size:10px;padding:2px 8px;border-radius:20px;background:${o.status==='Completed'?'#4CAF5022':'#FF980022'};color:${o.status==='Completed'?'#4CAF50':'#FF9800'}">${o.status}</span>
+                </div>
+            </div>`).join('') : '<div style="color:var(--text-muted);text-align:center;padding:40px">No orders today</div>';
+    } catch(e) {}
+
+    // Staff from shifts
+    try {
+        const shiftsData = await API.get('/Admin/GetActiveShifts');
+        const shifts = shiftsData.shifts || [];
+        document.getElementById('staffCount').textContent = shifts.length;
+        document.getElementById('staffList').innerHTML = shifts.length ? shifts.map(s => `
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+                <div style="width:36px;height:36px;border-radius:50%;background:var(--primary-light);color:var(--primary);display:flex;align-items:center;justify-content:center;font-weight:700">
+                    ${s.cashierName?.charAt(0) || '?'}
+                </div>
+                <div>
+                    <div style="font-weight:600;font-size:13px">${s.cashierName}</div>
+                    <div style="font-size:11px;color:var(--text-muted)">Since ${s.startTime}</div>
+                </div>
+                <div style="margin-left:auto;text-align:right">
+                    <div style="font-size:12px;font-weight:600">${s.totalOrders} orders</div>
+                    <div style="font-size:11px;color:var(--text-muted)">${s.totalSales?.toFixed(0)} EGP</div>
+                </div>
+            </div>`).join('') : '<div style="color:var(--text-muted);text-align:center;padding:20px">No active shifts</div>';
+    } catch(e) {}
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+    loadManagerDashboard();
+});
+</script>
+}

@@ -1,0 +1,230 @@
+@model RestaurantERP.Models.Product
+@{
+    ViewBag.PageTitle = "إضافة منتج جديد";
+    var categories = ViewBag.Categories as List<RestaurantERP.Models.Category> ?? new();
+    var branches = ViewBag.Branches as List<RestaurantERP.Models.Branch> ?? new();
+    var selectedBranchIds = ViewBag.SelectedBranchIds as List<int> ?? new();
+    var defaultBranchId = ViewBag.DefaultBranchId as int?;
+    var isEdit = Model?.Id > 0;
+    // Pre-select default branch if creating new
+    if (!isEdit && !selectedBranchIds.Any() && defaultBranchId.HasValue)
+        selectedBranchIds.Add(defaultBranchId.Value);
+}
+
+<div style="max-width:800px;margin:0 auto">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+        <a href="/Admin/Products" class="btn btn-outline btn-sm">← رجوع</a>
+        <h2 style="font-size:20px;font-weight:800">@(isEdit ? "تعديل المنتج" : "إضافة منتج جديد")</h2>
+    </div>
+
+    <div class="card">
+        <div class="card-body" style="padding:24px">
+            <!-- validation handled by JS prepareSubmit() -->
+            <form method="post" asp-action="@(isEdit ? "EditProduct" : "CreateProduct")" onsubmit="return prepareSubmit(event)" novalidate>
+                @Html.AntiForgeryToken()
+                @if (isEdit)
+                {
+                    <input type="hidden" asp-for="Id">
+                }
+
+                @* الفروع والتسعير والضريبة كلها بتتحدد وقت التوزيع *@
+                <div style="margin-bottom:20px;padding:14px;background:rgba(37,99,168,.08);border-radius:12px;border:1.5px solid var(--primary)">
+                    <div style="font-weight:800;font-size:13px;margin-bottom:4px">📋 دي بيانات الصنف الأساسية بس</div>
+                    <div style="font-size:12px;color:var(--text-muted);line-height:1.7">
+                        سعر البيع، الضريبة، الفرع، وتوجيه المطبخ بتتحدد وقت ما توزّع الصنف على فرع من
+                        <a href="/Inventory/Distribution" style="font-weight:700">شاشة توزيع المنتجات</a>،
+                        عشان نفس الصنف يقدر يتسعّر مختلف من فرع للتاني.
+                        وسعر التكلفة بيتحسب لوحده من <a href="/Inventory/Receipts" style="font-weight:700">ايصالات التوريد</a>.
+                    </div>
+                </div>
+
+                @* ══ اسم المنتج ════════════════════════════════════════ *@
+                <div class="form-group" style="margin-bottom:16px">
+                    <label class="form-label" style="font-weight:700">اسم المنتج (عربي) <span style="color:var(--danger)">*</span></label>
+                    <input asp-for="NameAr" class="form-control" dir="rtl"
+                           placeholder="مثال: كوكتيل فراولة"
+                           oninput="document.getElementById('hiddenName').value=this.value">
+                    <input asp-for="Name" id="hiddenName" type="hidden">
+                </div>
+
+                @* ══ الفئة والباركود ═══════════════════════════════ *@
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+                    <div class="form-group">
+                        <label class="form-label">الفئة <span style="color:var(--danger)">*</span></label>
+                        <select asp-for="CategoryId" class="form-control" id="categorySelect">
+                            <option value="0">-- اختر الفئة --</option>
+                            @foreach (var cat in categories)
+                            {
+                                <option value="@cat.Id">@cat.Icon @cat.NameAr</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">باركود الوحدة (اختياري)</label>
+                        <input asp-for="Barcode" class="form-control" style="font-family:monospace" placeholder="باركود...">
+                    </div>
+                </div>
+
+                @* ══ الوصف ══════════════════════════════════════════ *@
+                <div class="form-group" style="margin-bottom:16px">
+                    <label class="form-label">الوصف (اختياري)</label>
+                    <textarea asp-for="DescriptionAr" class="form-control" rows="2" dir="rtl" placeholder="وصف مختصر..."></textarea>
+                </div>
+
+                @* ══ الحالة ═════════════════════════════════════════ *@
+                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:12px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg-secondary);margin-bottom:16px">
+                    <input asp-for="IsActive" type="checkbox" style="width:18px;height:18px">
+                    <div>
+                        <div style="font-weight:700;font-size:13px">نشط في النظام</div>
+                        <div style="font-size:11px;color:var(--text-muted)">لو موقوف مش هيظهر في أي مكان</div>
+                    </div>
+                </label>
+                <input type="hidden" name="IsAvailable" value="true">
+
+                @* ══ وحدة القياس والتعبئة ═══════════════════════════════ *@
+                <div style="background:var(--bg-secondary);border-radius:10px;padding:14px;margin-bottom:16px">
+                    <div style="font-weight:800;font-size:13px;margin-bottom:4px">📏 وحدة القياس والتعبئة</div>
+                    <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px">
+                        دي بيانات ثابتة للصنف. الكمية وحد التنبيه بيتحددوا وقت التوزيع على كل فرع.
+                    </div>
+
+                    <div>
+                        <div class="form-group" style="margin:0;max-width:340px">
+                            <label class="form-label">وحدة القياس الأساسية <span style="color:var(--danger)">*</span></label>
+                            <select asp-for="Unit" class="form-control">
+                                <option value="قطعة">قطعة</option>
+                                <option value="زجاجة">زجاجة</option>
+                                <option value="علبة">علبة</option>
+                                <option value="كيس">كيس</option>
+                                <option value="كيلوجرام">كيلوجرام (كجم)</option>
+                                <option value="جرام">جرام (جم)</option>
+                                <option value="لتر">لتر</option>
+                                <option value="مللي لتر">مللي لتر (مل)</option>
+                            </select>
+                            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">
+                                كل أرصدة المخزن هتتحسب بالوحدة دي.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="border-top:1px dashed var(--border);margin-top:14px;padding-top:12px">
+                        <div style="font-weight:700;font-size:13px;margin-bottom:4px">📦 التعبئة (اختياري)</div>
+                        <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">
+                            لو بتستلم الصنف ده بالكرتونة أو الشوال، حدد اسم العبوة وهي بتشيل كام وحدة.
+                            وقتها تقدر تسجّل الوارد والمنصرف بالكرتونة والنظام هيحوّلها للوحدة الأساسية لوحده.
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                            <div class="form-group" style="margin:0">
+                                <label class="form-label">اسم العبوة</label>
+                                <input asp-for="PackagingName" class="form-control" placeholder="مثال: كرتونة / شوال / درزن" list="packagingOptions">
+                                <datalist id="packagingOptions">
+                                    <option value="كرتونة"></option>
+                                    <option value="شوال"></option>
+                                    <option value="درزن"></option>
+                                    <option value="صندوق"></option>
+                                    <option value="باكو"></option>
+                                </datalist>
+                            </div>
+                            <div class="form-group" style="margin:0">
+                                <label class="form-label">العبوة تشيل كام وحدة؟</label>
+                                <input asp-for="UnitsPerPackage" type="number" step="0.001" min="1" class="form-control" placeholder="مثال: 12">
+                            </div>
+                        </div>
+                    </div>
+
+                    @* ══ التقديم بالكوب/الحصة ══ *@
+                    <div style="border-top:1px dashed var(--border);margin-top:12px;padding-top:12px">
+                        <div style="font-weight:700;font-size:13px;margin-bottom:4px">☕ البيع بالحصة (اختياري)</div>
+                        <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">
+                            للأصناف اللي بتيجي بالكيلو أو اللتر لكن بتتباع بالكوب أو الحصة.
+                            مثال: القهوة وحدتها «كيلوجرام» وبتتباع «كباية»، والكيلو بيطلّع 10 كبايات.
+                            وقت التوزيع لو بعت 2 كيلو للفرع، الكاشير هيشوف 20 كباية.
+                            سيبها فاضية لو الصنف بيتباع بنفس وحدة المخزن.
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                            <div class="form-group" style="margin:0">
+                                <label class="form-label">اسم الحصة</label>
+                                <input asp-for="ServingName" class="form-control" placeholder="مثال: كباية / طبق / شريحة" list="servingOptions">
+                                <datalist id="servingOptions">
+                                    <option value="كباية"></option>
+                                    <option value="كوب"></option>
+                                    <option value="طبق"></option>
+                                    <option value="حصة"></option>
+                                    <option value="شريحة"></option>
+                                </datalist>
+                            </div>
+                            <div class="form-group" style="margin:0">
+                                <label class="form-label">الوحدة الواحدة تطلّع كام حصة؟</label>
+                                <input asp-for="ServingsPerUnit" type="number" step="0.001" min="1" class="form-control" placeholder="مثال: 10">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                @* Stock tracking is always on — the warehouse ledger needs it. Opening
+                   quantity stays 0: stock arrives through supply receipts, and the
+                   low-stock threshold is set per branch when distributing. *@
+                <input asp-for="TrackStock" type="hidden" value="true">
+                <input asp-for="StockQuantity" type="hidden" value="0">
+
+                @* ══ أزرار الحفظ ════════════════════════════════════ *@
+                <div style="display:flex;gap:10px;justify-content:flex-end;padding-top:16px;border-top:1px solid var(--border)">
+                    <a href="/Admin/Products" class="btn btn-outline">إلغاء</a>
+                    <button type="submit" class="btn btn-accent" style="min-width:150px">
+                        <span>@(isEdit ? "💾" : "➕")</span>
+                        <span>@(isEdit ? "حفظ التعديلات" : "إضافة المنتج")</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        /* This form now only captures product master data. Pricing, tax, branch
+           assignment and kitchen routing are set in the distribution screen. */
+
+        function showMsg(msg) {
+            const box = document.getElementById('formMsg');
+            if (box) { box.textContent = msg; box.style.display = 'block'; }
+            else alert(msg);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Arabic name mirrors into the hidden English name when that's left blank
+            const nameAr = document.querySelector('[name="NameAr"]');
+            const hidName = document.getElementById('hiddenName');
+            if (nameAr && hidName) {
+                nameAr.addEventListener('input', () => hidName.value = nameAr.value);
+                if (!hidName.value && nameAr.value) hidName.value = nameAr.value;
+            }
+        });
+
+        function prepareSubmit(e) {
+            try {
+                const nameAr = document.querySelector('[name="NameAr"]');
+                if (!nameAr || !nameAr.value.trim()) {
+                    showMsg('يرجى إدخال اسم الصنف');
+                    nameAr?.focus();
+                    e.preventDefault(); return false;
+                }
+                const hidName = document.getElementById('hiddenName');
+                if (hidName && !hidName.value.trim()) hidName.value = nameAr.value.trim();
+
+                const cat = document.querySelector('[name="CategoryId"]');
+                if (cat && (!cat.value || cat.value === '0')) {
+                    showMsg('يرجى اختيار الفئة');
+                    cat?.focus();
+                    e.preventDefault(); return false;
+                }
+                return true;
+            } catch (err) {
+                console.error('prepareSubmit error:', err);
+                e.preventDefault();
+                alert('حدث خطأ في التحقق: ' + err.message);
+                return false;
+            }
+        }
+    </script>
+}

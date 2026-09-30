@@ -1,0 +1,276 @@
+@model IEnumerable<RestaurantERP.Models.Category>
+@{
+    ViewData["Title"] = "الفئات";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">الفئات</h1>
+        <p class="page-subtitle">@Model.Count() فئة في النظام</p>
+    </div>
+    <button class="btn btn-primary" onclick="openAddModal()">
+        <i class="fas fa-plus me-2"></i>إضافة فئة
+    </button>
+</div>
+
+<div class="stats-grid" style="margin-bottom:24px">
+    @foreach (var cat in Model)
+    {
+        <div class="stat-card" style="cursor:pointer;border-left:4px solid @cat.ColorHex" onclick="editCategory(@cat.Id)">
+            <div class="stat-card-header">
+                <div class="stat-icon" style="background:@cat.ColorHex;color:#fff;font-size:22px">
+                    @(cat.Icon != null && cat.Icon.StartsWith("fa")
+                        ? (Microsoft.AspNetCore.Html.IHtmlContent)(new Microsoft.AspNetCore.Html.HtmlString($"<i class=\"fas {cat.Icon}\"></i>"))
+                        : new Microsoft.AspNetCore.Html.HtmlString($"<span style=\"font-size:22px\">{cat.Icon}</span>"))
+                </div>
+                <div>
+                    <span class="badge @(cat.IsActive ? "badge-success" : "badge-danger")" style="font-size:10px">
+                        @(cat.IsActive ? "نشط" : "غير نشط")
+                    </span>
+                </div>
+            </div>
+            <div class="stat-value" style="font-size:18px">@cat.NameAr</div>
+            <div style="margin-top:8px;font-size:13px;color:var(--text-muted)">
+                @(cat.Products?.Count ?? 0) منتج
+            </div>
+        </div>
+    }
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">جميع الفئات</h3>
+    </div>
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>الأيقونة</th>
+                    <th>الاسم</th>
+                    <th>اللون</th>
+                    <th>المنتجات</th>
+                    <th>تخطي المطبخ</th>
+                    <th>الحالة</th>
+                    <th>الإجراءات</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var cat in Model)
+                {
+                    <tr>
+                        <td>
+                            <div style="width:40px;height:40px;border-radius:10px;background:@cat.ColorHex;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px">
+                                @(cat.Icon != null && cat.Icon.StartsWith("fa")
+                                    ? (Microsoft.AspNetCore.Html.IHtmlContent)(new Microsoft.AspNetCore.Html.HtmlString($"<i class=\"fas {cat.Icon}\"></i>"))
+                                    : new Microsoft.AspNetCore.Html.HtmlString($"<span style=\"font-size:22px\">{cat.Icon}</span>"))
+                            </div>
+                        </td>
+                        <td><strong>@cat.NameAr</strong></td>
+                        <td>
+                            <div style="display:flex;align-items:center;gap:8px">
+                                <div style="width:20px;height:20px;border-radius:50%;background:@cat.ColorHex"></div>
+                                <span style="font-family:monospace;font-size:12px">@cat.ColorHex</span>
+                            </div>
+                        </td>
+                        <td>@(cat.Products?.Count ?? 0)</td>
+                        <td>
+                            @if (cat.SkipKitchen)
+                            {
+                                <span style="background:#22c55e22;color:#22c55e;font-size:10px;font-weight:800;padding:3px 9px;border-radius:20px">⚡ فوري</span>
+                            }
+                            else
+                            {
+                                <span style="color:var(--text-muted);font-size:12px">لا</span>
+                            }
+                        </td>
+                        <td><span class="badge @(cat.IsActive ? "badge-success" : "badge-danger")">@(cat.IsActive ? "نشط" : "غير نشط")</span></td>
+                        <td>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-sm btn-outline" onclick="editCategory(@cat.Id)" title="تعديل"><i class="fas fa-edit"></i></button>
+                                <button class="btn btn-sm btn-outline" onclick="deleteCategory(@cat.Id, '@cat.NameAr')" title="حذف" style="color:var(--danger)"><i class="fas fa-trash"></i></button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Category Modal -->
+<div class="modal-overlay" id="categoryModal">
+    <div class="modal" style="max-width:500px">
+        <div class="modal-header">
+            <h3 class="modal-title" id="modalTitle">إضافة فئة</h3>
+            <button class="modal-close" onclick="Modal.close('categoryModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="catId" value="0">
+
+            <!-- الاسم بالعربي فقط -->
+            <div class="form-group">
+                <label class="form-label">اسم الفئة <span style="color:var(--danger)">*</span></label>
+                <input type="text" id="catNameAr" class="form-control" dir="rtl" placeholder="مثال: المشروبات">
+            </div>
+
+            <!-- الأيقونة -->
+            <div class="form-group">
+                <label class="form-label">الأيقونة</label>
+                <div style="display:flex;gap:10px;align-items:center">
+                    <input type="text" id="catIcon" class="form-control" placeholder="fa-coffee أو رمز تعبيري" oninput="updateIconPreview()">
+                    <div id="iconPreview" style="width:50px;height:50px;border-radius:10px;background:var(--bg-secondary);display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--primary);flex-shrink:0">
+                        <i class="fas fa-star"></i>
+                    </div>
+                </div>
+                <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px">
+                    @foreach(var icon in new[]{"☕","🧊","🍽️","🥪","🥗","🍰","🥤","🥣","🍔","🍕","🍜","🍗","🥩","🍳","🥐","🧆","🍱","🍣"})
+                    {
+                        <button type="button" class="btn btn-sm btn-outline" onclick="selectIcon('@icon')" style="width:36px;height:36px;padding:0;font-size:18px">@icon</button>
+                    }
+                </div>
+            </div>
+
+            <!-- اللون -->
+            <div class="form-group">
+                <label class="form-label">اللون</label>
+                <div style="display:flex;gap:10px;flex-wrap:wrap">
+                    @foreach(var color in new[]{"#FF6B6B","#4ECDC4","#45B7D1","#96CEB4","#FFEAA7","#DDA0DD","#FF8C00","#20B2AA","#FF69B4","#7B68EE","#32CD32","#FF4500"})
+                    {
+                        <div onclick="selectColor('@color')" style="width:32px;height:32px;border-radius:50%;background:@color;cursor:pointer;border:3px solid transparent;transition:all 0.2s" class="color-swatch"></div>
+                    }
+                    <input type="color" id="catColorPicker" class="form-control" style="width:50px;height:32px;padding:2px;cursor:pointer" onchange="selectColor(this.value)">
+                </div>
+                <input type="hidden" id="catColor" value="#FF6B6B">
+            </div>
+
+            <!-- الحالة -->
+            <div class="form-group">
+                <label class="form-label">الحالة</label>
+                <div style="display:flex;flex-direction:column;gap:10px">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                        <input type="checkbox" id="catActive" checked style="width:18px;height:18px">
+                        <span>نشط</span>
+                    </label>
+                    <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:12px;background:var(--bg-secondary);border-radius:10px;border:2px solid var(--border-color)" id="skipKitchenLabel">
+                        <input type="checkbox" id="catSkipKitchen" style="width:18px;height:18px;margin-top:2px;flex-shrink:0">
+                        <div>
+                            <div style="font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px">
+                                ⚡ تخطي قائمة المطبخ
+                                <span style="background:#22c55e22;color:#22c55e;font-size:10px;font-weight:800;padding:2px 8px;border-radius:20px">فوري</span>
+                            </div>
+                            <div style="font-size:11px;color:var(--text-muted);margin-top:3px;line-height:1.5">
+                                المنتجات في هذه الفئة تذهب مباشرة إلى <strong>مكتمل</strong> دون المرور بالمطبخ.<br>
+                                مثال: شيبسي، مشروبات، سناكس معبأة.
+                            </div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="Modal.close('categoryModal')">إلغاء</button>
+            <button class="btn btn-primary" onclick="saveCategory()" id="saveCatBtn">
+                <i class="fas fa-save me-2"></i>حفظ
+            </button>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+const categoriesData = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(Model.Select(c => new {
+    id = c.Id, name = c.Name, nameAr = c.NameAr, icon = c.Icon,
+    colorHex = c.ColorHex, isActive = c.IsActive, skipKitchen = c.SkipKitchen
+})));
+
+function openAddModal() {
+    document.getElementById('modalTitle').textContent = 'إضافة فئة جديدة';
+    document.getElementById('catId').value = 0;
+    document.getElementById('catNameAr').value = '';
+    document.getElementById('catIcon').value = '';
+    document.getElementById('catActive').checked = true;
+    document.getElementById('catSkipKitchen').checked = false;
+    selectColor('#FF6B6B');
+    updateIconPreview();
+    Modal.open('categoryModal');
+}
+
+function editCategory(id) {
+    const cat = categoriesData.find(c => c.id === id);
+    if (!cat) return;
+    document.getElementById('modalTitle').textContent = 'تعديل الفئة';
+    document.getElementById('catId').value = cat.id;
+    document.getElementById('catNameAr').value = cat.nameAr;
+    document.getElementById('catIcon').value = cat.icon;
+    document.getElementById('catActive').checked = cat.isActive;
+    document.getElementById('catSkipKitchen').checked = cat.skipKitchen || false;
+    selectColor(cat.colorHex);
+    updateIconPreview();
+    Modal.open('categoryModal');
+}
+
+function updateIconPreview() {
+    const icon = document.getElementById('catIcon').value.trim();
+    const preview = document.getElementById('iconPreview');
+    if (icon.startsWith('fa')) {
+        preview.innerHTML = `<i class="fas ${icon}"></i>`;
+    } else {
+        preview.innerHTML = `<span style="font-size:28px">${icon || '🍽️'}</span>`;
+    }
+}
+
+function selectIcon(icon) {
+    document.getElementById('catIcon').value = icon;
+    updateIconPreview();
+}
+
+function selectColor(color) {
+    document.getElementById('catColor').value = color;
+    document.querySelectorAll('.color-swatch').forEach(s => {
+        s.style.border = s.style.background === color ? '3px solid var(--text-primary)' : '3px solid transparent';
+    });
+    document.getElementById('iconPreview').style.background = color + '22';
+    document.getElementById('iconPreview').style.color = color;
+}
+
+async function saveCategory() {
+    const nameAr = document.getElementById('catNameAr').value.trim();
+    if (!nameAr) { Toast.error('يرجى إدخال اسم الفئة'); return; }
+
+    const btn = document.getElementById('saveCatBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>جاري الحفظ...';
+
+    const payload = {
+        id:          parseInt(document.getElementById('catId').value),
+        name:        nameAr,        // use Arabic name for both fields
+        nameAr:      nameAr,
+        icon:        document.getElementById('catIcon').value,
+        colorHex:    document.getElementById('catColor').value,
+        isActive:    document.getElementById('catActive').checked,
+        skipKitchen: document.getElementById('catSkipKitchen').checked
+    };
+    try {
+        const res = await API.post('/Admin/SaveCategory', payload);
+        if (res.success) {
+            Toast.success('تم حفظ الفئة بنجاح');
+            setTimeout(() => location.reload(), 800);
+        } else {
+            Toast.error(res.message || 'فشل في حفظ الفئة');
+        }
+    } catch(e) { Toast.error('حدث خطأ أثناء الحفظ'); }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-save me-2"></i>حفظ';
+}
+
+async function deleteCategory(id, name) {
+    if (!confirm(`هل تريد حذف الفئة "${name}"؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
+    try {
+        const res = await API.post('/Admin/DeleteCategory', { id });
+        if (res.success) { Toast.success('تم حذف الفئة'); setTimeout(() => location.reload(), 800); }
+        else Toast.error(res.message || 'فشل في الحذف');
+    } catch(e) { Toast.error('حدث خطأ أثناء الحذف'); }
+}
+</script>
+}

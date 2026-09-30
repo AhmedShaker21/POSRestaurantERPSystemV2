@@ -1,0 +1,245 @@
+@model IEnumerable<RestaurantERP.Models.Refund>
+@{
+    ViewData["Title"] = "Refunds";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title"><i class="fas fa-undo-alt me-2" style="color:var(--danger)"></i><span data-t="refunds">Refunds</span></h1>
+        <p class="page-subtitle">@ViewBag.RefundCount <span data-t="refundsFor">refunds for</span> @ViewBag.Date</p>
+    </div>
+    <div class="d-flex gap-2 align-items-center">
+        <input type="text" id="searchInput" class="form-control" style="max-width:200px"
+               value="@ViewBag.Search" placeholder="Search refund / order #..."
+               onkeydown="if(event.key==='Enter')applySearch()">
+        <input type="date" class="form-control" style="max-width:180px"
+               value="@ViewBag.Date"
+               onchange="window.location.href='/Refund/AdminRefunds?date='+this.value">
+        <a href="/Refund/AdminRefunds" class="btn btn-outline">
+            <i class="fas fa-calendar-day me-2"></i>Today
+        </a>
+    </div>
+</div>
+
+<!-- Summary KPI Cards -->
+<div class="stats-grid" style="margin-bottom:24px">
+    <div class="stat-card" style="border-left:4px solid #FF6B6B">
+        <div class="stat-icon" style="background:#FF6B6B22;color:#FF6B6B">
+            <i class="fas fa-undo-alt"></i>
+        </div>
+        <div class="stat-value" style="color:#FF6B6B">@Model.Count(r => r.Status == RestaurantERP.Models.RefundStatus.Completed)</div>
+        <div class="stat-label" data-t="totalRefunds">Total Refunds</div>
+    </div>
+    <div class="stat-card" style="border-left:4px solid #FF9800">
+        <div class="stat-icon" style="background:#FF980022;color:#FF9800">
+            <i class="fas fa-coins"></i>
+        </div>
+        <div class="stat-value" style="color:#FF9800">@ViewBag.TotalRefunded.ToString("F0") EGP</div>
+        <div class="stat-label" data-t="totalRefunded">Total Refunded</div>
+    </div>
+    <div class="stat-card" style="border-left:4px solid #45B7D1">
+        <div class="stat-icon" style="background:#45B7D122;color:#45B7D1">
+            <i class="fas fa-rotate-left"></i>
+        </div>
+        <div class="stat-value">@Model.Count(r => r.RefundType == RestaurantERP.Models.RefundType.Full)</div>
+        <div class="stat-label" data-t="fullRefunds">Full Refunds</div>
+    </div>
+    <div class="stat-card" style="border-left:4px solid #96CEB4">
+        <div class="stat-icon" style="background:#96CEB422;color:#96CEB4">
+            <i class="fas fa-scissors"></i>
+        </div>
+        <div class="stat-value">@Model.Count(r => r.RefundType == RestaurantERP.Models.RefundType.Partial)</div>
+        <div class="stat-label" data-t="partialRefunds">Partial Refunds</div>
+    </div>
+</div>
+
+<!-- Refund Method Breakdown -->
+@if (Model.Any())
+{
+    <div class="card" style="margin-bottom:24px">
+        <div class="card-header">
+            <h3 class="card-title" data-t="refundsByMethod">Refunds by Method</h3>
+        </div>
+        <div class="card-body" style="padding:20px;display:flex;gap:16px;flex-wrap:wrap">
+            @{
+                var methods = Model.Where(r => r.Status == RestaurantERP.Models.RefundStatus.Completed)
+                    .GroupBy(r => r.RefundMethod)
+                    .Select(g => new { method = g.Key.ToString(), count = g.Count(), total = g.Sum(r => r.RefundTotal) });
+                var methodColors = new Dictionary<string, string> {
+                    {"Cash","#4CAF50"},{"Card","#45B7D1"},{"Digital","#9C27B0"},{"StoreCredit","#FF9800"}
+                };
+            }
+            @foreach (var m in methods)
+            {
+                var color = methodColors.GetValueOrDefault(m.method, "#aaa");
+                <div style="padding:14px 20px;background:var(--bg-secondary);border-radius:12px;border-left:4px solid @color;min-width:160px;flex:1">
+                    <div style="font-size:18px;font-weight:700;color:@color">@m.total.ToString("F0") EGP</div>
+                    <div style="font-size:13px;font-weight:600;margin-top:2px">@m.method</div>
+                    <div style="font-size:12px;color:var(--text-muted)">@m.count refund(s)</div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+<!-- Refunds Table -->
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title" data-t="refundDetails">Refund Details</h3>
+        <div class="d-flex gap-2">
+            <select id="typeFilter" class="form-control" style="max-width:150px" onchange="filterTable()">
+                <option value="">All Types</option>
+                <option value="Full">Full</option>
+                <option value="Partial">Partial</option>
+            </select>
+            <select id="methodFilter" class="form-control" style="max-width:160px" onchange="filterTable()">
+                <option value="">All Methods</option>
+                <option value="Cash">Cash</option>
+                <option value="Card">Card</option>
+                <option value="Digital">Digital</option>
+                <option value="StoreCredit">Store Credit</option>
+            </select>
+        </div>
+    </div>
+
+    @if (!Model.Any())
+    {
+        <div style="text-align:center;padding:80px;color:var(--text-muted)">
+            <i class="fas fa-check-circle fa-3x" style="color:#4CAF50;margin-bottom:16px;display:block"></i>
+            <div style="font-size:18px;font-weight:600">No refunds for this date</div>
+            <div style="font-size:13px;margin-top:6px">All transactions were clean!</div>
+        </div>
+    }
+    else
+    {
+        <div class="table-container">
+            <table class="data-table" id="refundsTable">
+                <thead>
+                    <tr>
+                        <th data-t="refundNo">Refund #</th>
+                        <th data-t="originalOrder">Original Order</th>
+                        <th data-t="time">Time</th>
+                        <th data-t="type">Type</th>
+                        <th data-t="items">Items</th>
+                        <th data-t="refundAmount">Subtotal</th>
+
+                        <th data-t="refundTotal">Refund Total</th>
+                        <th data-t="method">Method</th>
+                        <th data-t="reason">Reason</th>
+                        <th data-t="processedBy">By</th>
+                        <th data-t="actions">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in Model.OrderByDescending(x => x.CreatedAt))
+                    {
+                        var typeColor = r.RefundType == RestaurantERP.Models.RefundType.Full ? "#FF6B6B" : "#FF9800";
+                        var methodColors2 = new Dictionary<string, string> {
+                            {"Cash","#4CAF50"},{"Card","#45B7D1"},{"Digital","#9C27B0"},{"StoreCredit","#FF9800"}
+                        };
+                        var methodColor = methodColors2.GetValueOrDefault(r.RefundMethod.ToString(), "#aaa");
+                        <tr data-type="@r.RefundType" data-method="@r.RefundMethod">
+                            <td>
+                                <strong style="color:var(--danger)">@r.RefundNumber</strong>
+                            </td>
+                            <td>
+                                <a href="/Admin/OrderDetails/@r.OriginalOrderId"
+                                   style="color:var(--primary);font-weight:600;text-decoration:none">
+                                    @r.OriginalOrder?.OrderNumber
+                                </a>
+                            </td>
+                            <td style="font-size:12px">@r.CreatedAt.ToString("hh:mm tt")</td>
+                            <td>
+                                <span style="background:@(typeColor)22;color:@typeColor;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600">
+                                    @r.RefundType
+                                </span>
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline" onclick="toggleItems('@r.Id')"
+                                        style="font-size:11px;padding:3px 8px">
+                                    @r.Items.Count item(s) <i class="fas fa-chevron-down ms-1" style="font-size:9px"></i>
+                                </button>
+                            </td>
+                            <td>@r.RefundAmount.ToString("F2") EGP</td>
+                            <td style="color:var(--text-muted)">@r.RefundTax.ToString("F2") EGP</td>
+                            <td>
+                                <strong style="color:var(--danger);font-size:15px">@r.RefundTotal.ToString("F2") EGP</strong>
+                            </td>
+                            <td>
+                                <span style="background:@(methodColor)22;color:@methodColor;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600">
+                                    @r.RefundMethod
+                                </span>
+                            </td>
+                            <td style="font-size:12px;color:var(--text-muted);max-width:120px">@(r.Reason ?? "—")</td>
+                            <td style="font-size:12px">@(r.ProcessedBy?.UserName ?? "—")</td>
+                            <td>
+                                <a href="/Refund/RefundDetail/@r.Id" class="btn btn-sm btn-outline" title="View Details">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        <!-- Expandable items sub-row -->
+                        <tr id="items-@r.Id" style="display:none;background:var(--bg-secondary)">
+                            <td colspan="12" style="padding:0 24px 16px 60px">
+                                <div style="padding-top:12px;border-top:1px dashed var(--border-color)">
+                                    @foreach (var item in r.Items)
+                                    {
+                                        <div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border-color)">
+                                            <span>
+                                                <strong>@item.ProductName</strong>
+                                                @if (!string.IsNullOrEmpty(item.ProductNameAr))
+                                                {
+                                                    <span style="color:var(--text-muted);margin-left:8px" dir="rtl">(@item.ProductNameAr)</span>
+                                                }
+                                                <span style="background:var(--primary-light);color:var(--primary);padding:1px 8px;border-radius:10px;font-size:11px;margin-left:8px">×@item.Quantity</span>
+                                            </span>
+                                            <span style="color:var(--danger);font-weight:600">−@item.TotalPrice.ToString("F2") EGP</span>
+                                        </div>
+                                    }
+                                    @if (!string.IsNullOrEmpty(r.Notes))
+                                    {
+                                        <div style="font-size:12px;color:var(--text-muted);margin-top:8px">
+                                            <i class="fas fa-sticky-note me-1"></i>@r.Notes
+                                        </div>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        function toggleItems(id) {
+            const row = document.getElementById('items-' + id);
+            row.style.display = row.style.display === 'none' ? '' : 'none';
+        }
+
+        function filterTable() {
+            const type = document.getElementById('typeFilter').value;
+            const method = document.getElementById('methodFilter').value;
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            document.querySelectorAll('#refundsTable tbody tr:not([id^="items-"])').forEach(row => {
+                const itemsRow = document.getElementById('items-' + row.cells[0]?.textContent?.trim());
+                const show = (!type || row.dataset.type === type) &&
+                             (!method || row.dataset.method === method) &&
+                             (!search || row.textContent.toLowerCase().includes(search));
+                row.style.display = show ? '' : 'none';
+                if (itemsRow) itemsRow.style.display = 'none';
+            });
+        }
+
+        function applySearch() {
+            const search = document.getElementById('searchInput').value;
+            const date = '@ViewBag.Date';
+            window.location.href = `/Refund/AdminRefunds?date=${date}&search=${encodeURIComponent(search)}`;
+        }
+
+        document.getElementById('searchInput').addEventListener('input', filterTable);
+    </script>
+}

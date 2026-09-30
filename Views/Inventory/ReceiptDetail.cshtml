@@ -1,0 +1,99 @@
+@model RestaurantERP.Models.SupplyReceipt
+@{
+    ViewData["Title"] = "تفاصيل الإيصال";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.PageTitle = "تفاصيل ايصال التوريد";
+    string N(decimal d) => d.ToString("0.###");
+    string M(decimal d) => d.ToString("N2");
+}
+
+<div class="page-header no-print">
+    <div>
+        <h1 class="page-title">🧾 ايصال توريد @Model.ReceiptNumber</h1>
+        <p class="page-subtitle">@Model.Date.ToString("yyyy-MM-dd")</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline" href="/Inventory/Receipts">⬅ كل الإيصالات</a>
+        <button class="btn btn-primary" onclick="window.print()">🖨️ طباعة</button>
+    </div>
+</div>
+
+<div class="print-only" style="text-align:center;margin-bottom:16px">
+    <h2>ايصال توريد</h2>
+    <p>@Model.ReceiptNumber — @Model.Date.ToString("yyyy-MM-dd")</p>
+</div>
+
+<div class="card" style="margin-bottom:20px">
+    <div class="card-body">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;font-size:13px">
+            <div><span style="color:var(--text-muted)">المورد:</span> <strong>@(Model.Supplier?.Name ?? Model.SupplierNameSnapshot ?? "—")</strong></div>
+            <div><span style="color:var(--text-muted)">هاتف المورد:</span> <strong>@(Model.Supplier?.Phone ?? "—")</strong></div>
+            <div><span style="color:var(--text-muted)">رقم فاتورة المورد:</span> <strong>@(Model.InvoiceNumber ?? "—")</strong></div>
+            <div><span style="color:var(--text-muted)">سُجّل بواسطة:</span> <strong>@(Model.CreatedBy?.FullNameAr ?? Model.CreatedBy?.UserName ?? "—")</strong></div>
+            <div>
+                <span style="color:var(--text-muted)">الحالة:</span>
+                @if (Model.IsPaid)
+                {
+                    <strong style="color:#4CAF50">مسدد بالكامل</strong>
+                }
+                else
+                {
+                    <strong style="color:#EF4444">متبقي @M(Model.Outstanding) ج.م</strong>
+                }
+            </div>
+        </div>
+        @if (!string.IsNullOrEmpty(Model.Notes))
+        {
+            <div style="margin-top:12px;font-size:12px;color:var(--text-muted)">ملاحظات: @Model.Notes</div>
+        }
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header"><h3 class="card-title">الأصناف</h3></div>
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr><th>الصنف</th><th>الكمية المسجّلة</th><th>الكمية بالوحدة الأساسية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var i in Model.Items)
+                {
+                    <tr>
+                        <td>@i.ProductNameSnapshot</td>
+                        <td>
+                            @N(i.EnteredQuantity) @(i.EnteredAsPackaging ?? i.UnitSnapshot)
+                            @if (i.EnteredAsPackaging != null)
+                            {
+                                <div style="font-size:10px;color:var(--text-muted)">العبوة = @N(i.UnitsPerPackageSnapshot) @i.UnitSnapshot</div>
+                            }
+                        </td>
+                        <td><strong>@N(i.BaseQuantity) @i.UnitSnapshot</strong></td>
+                        <td>
+                            @M(i.CostPerEnteredUnit) / @(i.EnteredAsPackaging ?? i.UnitSnapshot)
+                            @if (i.EnteredAsPackaging != null)
+                            {
+                                <div style="font-size:10px;color:var(--text-muted)">= @i.CostPerBaseUnit.ToString("N3") / @i.UnitSnapshot</div>
+                            }
+                        </td>
+                        <td><strong>@M(i.LineTotal)</strong></td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="4" style="text-align:left;font-weight:900">الإجمالي</td>
+                    <td style="font-weight:900">@M(Model.TotalCost) ج.م</td>
+                </tr>
+                <tr>
+                    <td colspan="4" style="text-align:left">المسدد</td>
+                    <td>@M(Model.AmountPaid) ج.م</td>
+                </tr>
+                <tr>
+                    <td colspan="4" style="text-align:left">المتبقي</td>
+                    <td>@M(Model.Outstanding) ج.م</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>

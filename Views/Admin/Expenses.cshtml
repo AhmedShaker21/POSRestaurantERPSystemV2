@@ -1,0 +1,331 @@
+@model IEnumerable<RestaurantERP.Models.Expense>
+@{
+    ViewData["Title"] = "المصروفات";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var thisMonth = Model.Where(e => e.Date.Month == DateTime.Today.Month && e.Date.Year == DateTime.Today.Year).ToList();
+    var branches = ViewBag.Branches as List<RestaurantERP.Models.Branch> ?? new();
+    var selectedBranchId = ViewBag.BranchId as int?;
+    var selectedBranch = branches.FirstOrDefault(b => b.Id == selectedBranchId);
+}
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">المصروفات</h1>
+        <p class="page-subtitle">تتبع وإدارة مصروفات المطعم</p>
+    </div>
+    <button class="btn btn-primary" onclick="Modal.open('addExpenseModal')">
+        <i class="fas fa-plus me-2"></i>إضافة مصروف
+    </button>
+</div>
+
+<!-- فلتر الفرع -->
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;
+    padding:12px 16px;background:var(--card-bg);border:1px solid var(--border-color);
+    border-radius:14px;box-shadow:var(--shadow)">
+    <div style="font-size:12px;font-weight:700;color:var(--text-muted);white-space:nowrap">
+        <i class="fas fa-code-branch me-1" style="color:var(--primary)"></i> فرع المصروف:
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;flex:1">
+        <a href="/Admin/Expenses?from=@ViewBag.From&to=@ViewBag.To"
+               style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;text-decoration:none;
+            border:2px solid @(selectedBranchId == null ? "var(--primary)" : "var(--border-color)");
+            background:@(selectedBranchId == null ? "var(--primary)" : "transparent");
+            color:@(selectedBranchId == null ? "#fff" : "var(--text-muted)")">
+            🌐 كل الفروع
+        </a>
+        @foreach (var b in branches)
+        {
+            var isSel = selectedBranchId == b.Id;
+            <a href="/Admin/Expenses?from=@ViewBag.From&to=@ViewBag.To&branchId=@b.Id"
+                   style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;text-decoration:none;
+                display:flex;align-items:center;gap:4px;
+                border:2px solid @(isSel ? b.ColorHex : "var(--border-color)");
+                background:@(isSel ? b.ColorHex : "transparent");
+                color:@(isSel ? "#fff" : "var(--text-muted)")">
+                @b.Icon @b.NameAr
+            </a>
+        }
+    </div>
+</div>
+
+<!-- بطاقات الإحصاء -->
+<div class="stats-grid" style="margin-bottom:24px">
+    <div class="stat-card" style="margin-top:15px">
+        <div class="stat-icon" style="background:#FF6B6B22;color:#FF6B6B"><i class="fas fa-receipt"></i></div>
+        <div class="stat-value">@Model.Count()</div>
+        <div class="stat-label">إجمالي المصروفات</div>
+    </div>
+    <div class="stat-card" style="margin-top:15px">
+        <div class="stat-icon" style="background:#FF980022;color:#FF9800"><i class="fas fa-calendar"></i></div>
+        <div class="stat-value">@thisMonth.Count</div>
+        <div class="stat-label">مصروفات الشهر</div>
+    </div>
+    <div class="stat-card" style="margin-top:15px">
+        <div class="stat-icon" style="background:#45B7D122;color:#45B7D1"><i class="fas fa-coins"></i></div>
+        <div class="stat-value">@Model.Sum(e => e.Amount).ToString("N0") ج.م</div>
+        <div class="stat-label">إجمالي المبالغ</div>
+    </div>
+    <div class="stat-card" style="margin-top:15px">
+        <div class="stat-icon" style="background:#96CEB422;color:#96CEB4"><i class="fas fa-chart-line"></i></div>
+        <div class="stat-value">@thisMonth.Sum(e => e.Amount).ToString("N0") ج.م</div>
+        <div class="stat-label">مجموع الشهر الحالي</div>
+    </div>
+</div>
+
+<!-- جدول المصروفات -->
+<div class="card">
+    <div class="card-header">
+        <div class="d-flex gap-3 align-items-center flex-wrap">
+            <div style="position:relative">
+                <i class="fas fa-search" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:13px"></i>
+                <input type="text" id="searchInput" class="form-control" style="max-width:220px;padding-right:36px"
+                       placeholder="بحث في المصروفات..." oninput="filterExpenses()">
+            </div>
+            <select id="catFilter" class="form-control" style="max-width:180px" onchange="filterExpenses()">
+                <option value="">كل الفئات</option>
+                @foreach (var cat in Model.Select(e => e.Category).Distinct().Where(c => !string.IsNullOrEmpty(c)).OrderBy(c => c))
+                {
+                    <option value="@cat">@cat</option>
+                }
+            </select>
+            <div style="margin-right:auto;font-size:13px;color:var(--text-muted)" id="visibleCount">
+                @Model.Count() مصروف
+            </div>
+        </div>
+    </div>
+    <div class="table-container">
+        <table class="data-table" id="expensesTable">
+            <thead>
+                <tr>
+                    <th>التاريخ</th>
+                    <th>العنوان</th>
+                    <th>الفئة</th>
+                    <th>الفرع</th>
+                    <th>المبلغ</th>
+                    <th>طريقة الدفع</th>
+                    <th>سُجِّل بواسطة</th>
+                    <th>ملاحظات</th>
+                    <th>الإجراءات</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var e in Model.OrderByDescending(x => x.Date))
+                {
+                    var payAr = e.PaymentMethod == "Cash" ? "نقدي"
+                              : e.PaymentMethod == "Card" ? "كارت"
+                              : e.PaymentMethod == "Digital" ? "إلكتروني"
+                              : e.PaymentMethod ?? "—";
+                    <tr data-cat="@e.Category" data-search="@e.Title @e.Category @e.Description">
+                        <td style="white-space:nowrap">@e.Date.ToString("yyyy/MM/dd")</td>
+                        <td><strong>@e.Title</strong></td>
+                        <td>
+                            <span class="badge badge-primary">@(e.Category ?? "أخرى")</span>
+                        </td>
+                        <td>
+                            @if (e.Branch != null)
+                            {
+                                <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;
+                                    border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap;
+                                    background:@(e.Branch.ColorHex)18;color:@e.Branch.ColorHex;
+                                    border:1px solid @(e.Branch.ColorHex)33">
+                                    @e.Branch.Icon @e.Branch.NameAr
+                                </span>
+                            }
+                            else
+                            {
+                                <span style="color:var(--text-muted);font-size:12px">—</span>
+                            }
+                        </td>
+                        <td style="color:var(--danger);font-weight:700">@e.Amount.ToString("N2") ج.م</td>
+                        <td>@payAr</td>
+                        <td style="font-size:12px;color:var(--text-muted)">
+                            @(e.CreatedBy?.FullNameAr ?? e.CreatedBy?.UserName ?? "—")
+                        </td>
+                        <td style="font-size:12px;color:var(--text-muted);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                            @e.Description
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline"
+                                    onclick="deleteExpense(@e.Id, '@e.Title.Replace("'", "\\'")')"
+                                    style="color:var(--danger)" title="حذف">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                }
+                @if (!Model.Any())
+                {
+                    <tr>
+                        <td colspan="8" style="text-align:center;padding:48px;color:var(--text-muted)">
+                            <div style="font-size:40px;margin-bottom:12px">💸</div>
+                            <p>لا توجد مصروفات مسجلة</p>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- مودال إضافة مصروف -->
+<div class="modal-overlay" id="addExpenseModal">
+    <div class="modal" style="max-width:500px">
+        <div class="modal-header">
+            <h3 class="modal-title">إضافة مصروف جديد</h3>
+            <button class="modal-close" onclick="Modal.close('addExpenseModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+
+            <!-- العنوان -->
+            <div class="form-group">
+                <label class="form-label">عنوان المصروف <span style="color:var(--danger)">*</span></label>
+                <input type="text" id="expTitle" class="form-control"
+                       dir="rtl" placeholder="مثال: توريد خضروات">
+            </div>
+
+            <!-- المبلغ والتاريخ -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                <div class="form-group">
+                    <label class="form-label">المبلغ (ج.م) <span style="color:var(--danger)">*</span></label>
+                    <input type="number" id="expAmount" class="form-control"
+                           placeholder="0.00" step="0.01" min="0">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">التاريخ</label>
+                    <input type="date" id="expDate" class="form-control"
+                           value="@DateTime.Today.ToString("yyyy-MM-dd")">
+                </div>
+            </div>
+
+            <!-- الفئة وطريقة الدفع -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                <div class="form-group">
+                    <label class="form-label">الفئة</label>
+                    <select id="expCategory" class="form-control">
+                        <option value="مواد خام">مواد خام</option>
+                        <option value="مرافق">مرافق (كهرباء، مياه، غاز)</option>
+                        <option value="رواتب">رواتب وأجور</option>
+                        <option value="معدات">معدات وأدوات</option>
+                        <option value="تسويق">تسويق وإعلان</option>
+                        <option value="صيانة">صيانة وإصلاح</option>
+                        <option value="إيجار">إيجار</option>
+                        <option value="نقل">نقل وتوصيل</option>
+                        <option value="أخرى">أخرى</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">طريقة الدفع</label>
+                    <select id="expPayment" class="form-control">
+                        <option value="Cash">نقدي</option>
+                        <option value="Card">كارت</option>
+                        <option value="Digital">إلكتروني</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- الفرع -->
+            <div class="form-group">
+                <label class="form-label">
+                    <i class="fas fa-code-branch me-1" style="color:var(--primary)"></i>
+                    الفرع <span style="color:var(--danger)">*</span>
+                </label>
+                <select id="expBranch" class="form-control">
+                    @foreach (var b in branches)
+                    {
+                        var isDefault = selectedBranchId == b.Id || (selectedBranchId == null && b.IsMainBranch);
+                        <option value="@b.Id" selected="@isDefault">@b.Icon @b.NameAr</option>
+                    }
+                </select>
+            </div>
+
+            <!-- ملاحظات -->
+            <div class="form-group">
+                <label class="form-label">ملاحظات (اختياري)</label>
+                <textarea id="expNotes" class="form-control" rows="2"
+                          dir="rtl" placeholder="تفاصيل إضافية..."></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="Modal.close('addExpenseModal')">إلغاء</button>
+            <button class="btn btn-primary" id="saveExpenseBtn" onclick="saveExpense()">
+                <i class="fas fa-save me-2"></i>حفظ المصروف
+            </button>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        /* ── فلترة ─────────────────────────────────────────────────── */
+        function filterExpenses() {
+            const search = (document.getElementById('searchInput').value || '').toLowerCase();
+            const cat    = document.getElementById('catFilter').value;
+            let visible  = 0;
+            document.querySelectorAll('#expensesTable tbody tr[data-search]').forEach(row => {
+                const matchSearch = !search || (row.dataset.search || '').toLowerCase().includes(search)
+                                 || row.textContent.toLowerCase().includes(search);
+                const matchCat    = !cat || row.dataset.cat === cat;
+                const show = matchSearch && matchCat;
+                row.style.display = show ? '' : 'none';
+                if (show) visible++;
+            });
+            document.getElementById('visibleCount').textContent = visible + ' مصروف';
+        }
+
+        /* ── حفظ المصروف ──────────────────────────────────────────── */
+        async function saveExpense() {
+            const title  = document.getElementById('expTitle').value.trim();
+            const amount = parseFloat(document.getElementById('expAmount').value) || 0;
+
+            if (!title)    { Toast.warning('يرجى إدخال عنوان المصروف'); return; }
+            if (amount <= 0) { Toast.warning('يرجى إدخال مبلغ صحيح'); return; }
+
+            const btn = document.getElementById('saveExpenseBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>جاري الحفظ...';
+
+            const payload = {
+                id:            0,
+                title,
+                amount,
+                date:          document.getElementById('expDate').value || new Date().toISOString().split('T')[0],
+                category:      document.getElementById('expCategory').value,
+                paymentMethod: document.getElementById('expPayment').value,   // ← FIX: string "Cash"/"Card"/"Digital"
+                description:   document.getElementById('expNotes').value.trim(),
+                notes:         document.getElementById('expNotes').value.trim(),
+                branchId:      parseInt(document.getElementById('expBranch')?.value) || null
+            };
+
+            try {
+                const res = await API.post('/Admin/SaveExpense', payload);
+                if (res.success) {
+                    Toast.success('تم حفظ المصروف ✅');
+                    setTimeout(() => location.reload(), 700);
+                } else {
+                    Toast.error(res.message || 'فشل الحفظ');
+                }
+            } catch(e) {
+                Toast.error('حدث خطأ أثناء الحفظ');
+            }
+
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-save me-2"></i>حفظ المصروف';
+        }
+
+        /* ── حذف المصروف ──────────────────────────────────────────── */
+        async function deleteExpense(id, title) {
+            if (!confirm(`هل تريد حذف المصروف "${title}"؟`)) return;
+            try {
+                const res = await API.post('/Admin/DeleteExpense', { id });   // ← matches DeleteByIdRequest
+                if (res.success) {
+                    Toast.success('تم حذف المصروف');
+                    setTimeout(() => location.reload(), 600);
+                } else {
+                    Toast.error(res.message || 'فشل الحذف');
+                }
+            } catch(e) {
+                Toast.error('حدث خطأ');
+            }
+        }
+    </script>
+}

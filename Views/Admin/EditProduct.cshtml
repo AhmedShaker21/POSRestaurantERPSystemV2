@@ -1,0 +1,547 @@
+@model RestaurantERP.Models.Product
+@{
+    ViewBag.PageTitle = "إضافة منتج جديد";
+    var categories = ViewBag.Categories as List<RestaurantERP.Models.Category> ?? new();
+    var branches = ViewBag.Branches as List<RestaurantERP.Models.Branch> ?? new();
+    var selectedBranchIds = ViewBag.SelectedBranchIds as List<int> ?? new();
+    var defaultBranchId = ViewBag.DefaultBranchId as int?;
+    var isEdit = Model?.Id > 0;
+    // Pre-select default branch if creating new
+    if (!isEdit && !selectedBranchIds.Any() && defaultBranchId.HasValue)
+        selectedBranchIds.Add(defaultBranchId.Value);
+}
+
+<div style="max-width:800px;margin:0 auto">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+        <a href="/Admin/Products" class="btn btn-outline btn-sm">← رجوع</a>
+        <h2 style="font-size:20px;font-weight:800">@(isEdit ? "تعديل المنتج" : "إضافة منتج جديد")</h2>
+    </div>
+
+    <div class="card">
+        <div class="card-body" style="padding:24px">
+            <!-- validation handled by JS prepareSubmit() -->
+            <form method="post" asp-action="@(isEdit ? "EditProduct" : "CreateProduct")" onsubmit="return prepareSubmit(event)" novalidate>
+                @Html.AntiForgeryToken()
+                @if (isEdit)
+                {
+                    <input type="hidden" asp-for="Id">
+                }
+
+                @* ══ الفروع (multi-select) ══════════════════════════════ *@
+                <div style="margin-bottom:20px;padding:16px;background:var(--bg-secondary);border-radius:12px;border:1.5px solid var(--border-color)">
+                    <div style="font-size:13px;font-weight:800;margin-bottom:12px;display:flex;align-items:center;gap:6px">
+                        <i class="fas fa-code-branch" style="color:var(--primary)"></i>
+                        الفروع التي يُباع فيها هذا المنتج <span style="color:var(--danger)">*</span>
+                        <span style="font-size:11px;font-weight:400;color:var(--text-muted)">(يمكن اختيار أكثر من فرع)</span>
+                    </div>
+                    <div style="display:flex;flex-wrap:wrap;gap:10px" id="branchSelector">
+                        @foreach (var b in branches)
+                        {
+                            var isChecked = selectedBranchIds.Contains(b.Id);
+                            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 14px;border-radius:12px;
+                                border:2px solid @(isChecked ? b.ColorHex : "var(--border-color)");
+                                background:@(isChecked ? b.ColorHex + "18" : "var(--card-bg)");
+                                color:@(isChecked ? b.ColorHex : "var(--text-muted)");transition:all .2s"
+                                   id="branch-label-@b.Id"
+                                   onclick="toggleBranchLabel(@b.Id, '@b.ColorHex')">
+                                <input type="checkbox" name="selectedBranchIds" value="@b.Id"
+                                @(isChecked ? "checked" : "")
+                                       id="branch-cb-@b.Id" style="width:16px;height:16px;cursor:pointer">
+                                <span style="font-size:18px">@b.Icon</span>
+                                <div>
+                                    <div style="font-size:13px;font-weight:700">@b.NameAr</div>
+                                    @if (b.IsMainBranch)
+                                    {
+                                        <div style="font-size:9px;opacity:.6">الفرع الرئيسي</div>
+                                    }
+                                </div>
+                            </label>
+                        }
+                    </div>
+                </div>
+
+                @* ══ اسم المنتج ════════════════════════════════════════ *@
+                <div class="form-group" style="margin-bottom:16px">
+                    <label class="form-label" style="font-weight:700">اسم المنتج (عربي) <span style="color:var(--danger)">*</span></label>
+                    <input asp-for="NameAr" class="form-control" dir="rtl"
+                           placeholder="مثال: كوكتيل فراولة"
+                           oninput="document.getElementById('hiddenName').value=this.value">
+                    <input asp-for="Name" id="hiddenName" type="hidden">
+                </div>
+
+                @* ══ نوع البيع: وحدة أم كرتون ═══════════════════════ *@
+                <div style="margin-bottom:16px;padding:14px;background:var(--bg-secondary);border-radius:12px;border:1.5px solid var(--border-color)">
+                    <div style="font-size:13px;font-weight:800;margin-bottom:10px">🏷️ طريقة البيع</div>
+                    <div style="display:flex;gap:12px;margin-bottom:14px">
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 18px;border-radius:10px;border:2px solid var(--border);flex:1;justify-content:center" id="unit-label">
+                            <input type="radio" name="_sellByBoxRadio" id="radioUnit" value="false" @(Model?.SellByBox == true ? "" : "checked")
+                                   onchange="toggleSellType(false)" style="width:16px;height:16px">
+                            <span style="font-size:20px">🏷️</span>
+                            <div>
+                                <div style="font-weight:700;font-size:13px">بيع بالوحدة</div>
+                                <div style="font-size:11px;color:var(--text-muted)">قهوة، عصير، مشروب...</div>
+                            </div>
+                        </label>
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 18px;border-radius:10px;border:2px solid var(--border);flex:1;justify-content:center" id="box-label">
+                            <input type="radio" name="_sellByBoxRadio" id="radioBox" value="true" @(Model?.SellByBox == true ? "checked" : "")
+                                   onchange="toggleSellType(true)" style="width:16px;height:16px">
+                            <span style="font-size:20px">📦</span>
+                            <div>
+                                <div style="font-weight:700;font-size:13px">بيع من كرتون/علبة</div>
+                                <div style="font-size:11px;color:var(--text-muted)">شيبسي، مياه، علب...</div>
+                            </div>
+                        </label>
+                    </div>
+                    <input asp-for="SellByBox" id="hiddenSellByBox" type="hidden" value="@(Model?.SellByBox == true ? "true" : "false")">
+
+                    @* ── وضع الكرتون ── *@
+                    <div id="boxSection" style="display:@(Model?.SellByBox == true ? "block" : "none");background:var(--card-bg);padding:14px;border-radius:10px;border:1.5px solid #f59e0b44">
+                        <div style="font-size:12px;color:#b45309;font-weight:700;margin-bottom:10px">
+                            📦 إعدادات الكرتون/العلبة
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:10px">
+                            <div class="form-group">
+                                <label class="form-label" style="font-size:12px">عدد الوحدات في الكرتون <span style="color:var(--danger)">*</span></label>
+                                <input asp-for="UnitsPerBox" type="number" class="form-control" min="1" id="unitsPerBox"
+                                       placeholder="مثال: 12" oninput="calcBoxPrices()">
+                                <div style="font-size:10px;color:var(--text-muted);margin-top:3px">كم قطعة في الكرتون؟</div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" style="font-size:12px">سعر شراء الكرتون (ج.م) <span style="color:var(--danger)">*</span></label>
+                                <input asp-for="BoxCostPrice" type="number" class="form-control" step="0.01" min="0" id="boxCostPrice"
+                                       placeholder="مثال: 100" oninput="calcBoxPrices()">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" style="font-size:12px">سعر بيع الكرتون (ج.م) <span style="color:var(--danger)">*</span></label>
+                                <input asp-for="BoxSellPrice" type="number" class="form-control" step="0.01" min="0" id="boxSellPrice"
+                                       placeholder="مثال: 120" oninput="calcBoxPrices()">
+                            </div>
+                        </div>
+                        <div id="boxCalcResult" style="display:none;padding:10px;background:#22c55e12;border:1px solid #22c55e33;border-radius:8px;font-size:12px">
+                            <div style="display:flex;gap:20px;flex-wrap:wrap">
+                                <div>سعر بيع الوحدة: <strong id="unitSellCalc" style="color:#15803d">—</strong></div>
+                                <div>تكلفة الوحدة: <strong id="unitCostCalc" style="color:#b45309">—</strong></div>
+                                <div>ربح الوحدة: <strong id="unitProfitCalc" style="color:var(--success)">—</strong></div>
+                                <div>هامش الربح: <strong id="unitMarginCalc" style="color:var(--primary)">—</strong></div>
+                            </div>
+                        </div>
+                        <div class="form-group" style="margin-top:10px">
+                            <label class="form-label" style="font-size:12px">باركود الكرتون (اختياري)</label>
+                            <input asp-for="BoxBarcode" class="form-control" style="font-family:monospace" placeholder="باركود الكرتون الكامل">
+                        </div>
+                    </div>
+
+                    @* ── وضع الوحدة ── *@
+                    @* Hidden fields — always submitted *@
+                    <input type="hidden" id="hiddenPrice" name="Price" value="@(Model?.Price ?? 0)">
+                    <input type="hidden" id="hiddenCostPrice" name="CostPrice" value="@(Model?.CostPrice ?? 0)">
+                    <div id="unitSection" style="display:@(Model?.SellByBox == true ? "none" : "grid");grid-template-columns:1fr 1fr;gap:16px">
+                        <div class="form-group">
+                            <label class="form-label">سعر البيع (ج.م) <span style="color:var(--danger)">*</span></label>
+                            <input type="number" class="form-control" step="0.01" min="0" id="unitPrice"
+                                   value="@(Model?.SellByBox==true ? "" : Model?.Price > 0 ? Model.Price.ToString() : "")"
+                                   oninput="calcUnitProfit(); syncPrices()">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">
+                                سعر التكلفة (ج.م)
+                                <button type="button" onclick="autoCalcUnitCost()"
+                                        style="margin-right:6px;background:#2563a815;color:var(--primary);border:none;border-radius:6px;padding:1px 7px;font-size:10px;font-weight:700;cursor:pointer">
+                                    75% تلقائي
+                                </button>
+                            </label>
+                            <input type="number" class="form-control" step="0.01" min="0" id="unitCostPrice"
+                                   value="@(Model?.SellByBox==true ? "" : Model?.CostPrice > 0 ? Model.CostPrice.ToString("F2") : "")"
+                                   oninput="calcUnitProfit(); syncPrices()">
+                        </div>
+                    </div>
+                    <div id="unitProfitAlert" style="display:none;margin-top:8px;padding:8px 12px;border-radius:8px;font-size:12px"></div>
+                </div>
+
+                @* ══ الضريبة ════════════════════════════════════════ *@
+                <div style="margin-bottom:16px;padding:14px;background:var(--bg-secondary);border-radius:12px;border:1.5px solid var(--border-color)">
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                        <div style="font-size:13px;font-weight:800">💰 ضريبة القيمة المضافة</div>
+                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:600">
+                            <input type="checkbox" id="taxOverrideCheck" @(Model?.TaxRateOverride.HasValue == true ? "checked" : "")
+                                   onchange="toggleTaxOverride()" style="width:15px;height:15px">
+                            تخصيص الضريبة لهذا المنتج
+                        </label>
+                    </div>
+                    <div id="taxDefaultInfo" style="font-size:12px;color:var(--text-muted);display:@(Model?.TaxRateOverride.HasValue == true ? "none" : "flex");align-items:center;gap:6px">
+                        <span style="background:#6b728015;color:#6b7280;padding:3px 10px;border-radius:10px;font-weight:700">14% (الافتراضي)</span>
+                        <span>يطبق على هذا المنتج ما لم تتغير الإعدادات</span>
+                    </div>
+                    <div id="taxOverrideSection" style="display:@(Model?.TaxRateOverride.HasValue == true ? "block" : "none")">
+                        <div style="display:flex;align-items:center;gap:10px">
+                            <input asp-for="TaxRateOverride" type="number" class="form-control" style="max-width:120px"
+                                   step="0.5" min="0" max="100" placeholder="14.0"
+                                   id="taxOverrideInput" oninput="showTaxPreview()">
+                            <span style="font-size:13px;font-weight:700">%</span>
+                            <div id="taxPreview" style="font-size:12px;color:var(--text-muted)"></div>
+                        </div>
+                        <div style="font-size:11px;color:#f59e0b;margin-top:6px">
+                            ⚠️ سيتجاهل النظام الإعداد الافتراضي (14%) لهذا المنتج فقط
+                        </div>
+                    </div>
+                </div>
+
+                @* ══ الفئة والباركود ═══════════════════════════════ *@
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+                    <div class="form-group">
+                        <label class="form-label">الفئة <span style="color:var(--danger)">*</span></label>
+                        <select asp-for="CategoryId" class="form-control" id="categorySelect">
+                            <option value="0">-- اختر الفئة --</option>
+                            @foreach (var cat in categories)
+                            {
+                                <option value="@cat.Id">@cat.Icon @cat.NameAr</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">باركود الوحدة (اختياري)</label>
+                        <input asp-for="Barcode" class="form-control" style="font-family:monospace" placeholder="باركود...">
+                    </div>
+                </div>
+
+                @* ══ الوصف ══════════════════════════════════════════ *@
+                <div class="form-group" style="margin-bottom:16px">
+                    <label class="form-label">الوصف (اختياري)</label>
+                    <textarea asp-for="DescriptionAr" class="form-control" rows="2" dir="rtl" placeholder="وصف مختصر..."></textarea>
+                </div>
+
+                @* ══ الحالة ═════════════════════════════════════════ *@
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+                    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:12px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg-secondary)">
+                        <input asp-for="IsActive" type="checkbox" style="width:18px;height:18px">
+                        <div>
+                            <div style="font-weight:700;font-size:13px">نشط في النظام</div>
+                            <div style="font-size:11px;color:var(--text-muted)">يظهر في لوحة التحكم</div>
+                        </div>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:12px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg-secondary)">
+                        <input asp-for="IsAvailable" type="checkbox" style="width:18px;height:18px">
+                        <div>
+                            <div style="font-weight:700;font-size:13px">متاح للطلب</div>
+                            <div style="font-size:11px;color:var(--text-muted)">يظهر في شاشة الكاشير</div>
+                        </div>
+                    </label>
+                </div>
+
+                @* ══ توجيه المطبخ ════════════════════════════════════ *@
+                <div class="form-group" style="margin-bottom:16px">
+                    <label class="form-label">توجيه المطبخ</label>
+                    <select asp-for="SkipKitchenOverride" class="form-control">
+                        <option value="">حسب إعداد الفئة (افتراضي)</option>
+                        <option value="true">🚀 لا يمر على المطبخ — يخرج على طول (زي المياه أو الكانز)</option>
+                        <option value="false">👨‍🍳 لازم يمر على المطبخ حتى لو الفئة معفية</option>
+                    </select>
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px">
+                        الإعداد الافتراضي بييجي من الفئة، لكن ممكن تخصّص هذا المنتج بالذات لو مختلف عن باقي أصناف نفس الفئة.
+                    </div>
+                </div>
+
+                @* ══ تتبع المخزون ════════════════════════════════════ *@
+                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:12px;border:1.5px solid var(--border);border-radius:10px;margin-bottom:12px;background:var(--bg-secondary)">
+                    <input asp-for="TrackStock" type="checkbox" style="width:18px;height:18px" id="trackStock" onchange="toggleStock()">
+                    <div>
+                        <div style="font-weight:700;font-size:13px">تتبع المخزون</div>
+                        <div style="font-size:11px;color:var(--text-muted)">تحديد كمية وتنبيه عند النفاد</div>
+                    </div>
+                </label>
+                <div id="stockSection" style="display:none;background:var(--bg-secondary);border-radius:10px;padding:14px;margin-bottom:16px">
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+                        <div class="form-group">
+                            <label class="form-label">الكمية الحالية (بالمخزون المركزي)</label>
+                            <input asp-for="StockQuantity" type="number" step="0.001" class="form-control" readonly style="opacity:.7;cursor:not-allowed">
+                            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">لتعديل الكمية استخدم <a href="/Inventory/Dashboard">🏬 لوحة المخزون</a> (وارد/منصرف) حتى يبقى السجل دقيقًا</div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">وحدة القياس الأساسية</label>
+                            <select asp-for="Unit" class="form-control">
+                                <option value="قطعة">قطعة</option>
+                                <option value="زجاجة">زجاجة</option>
+                                <option value="علبة">علبة</option>
+                                <option value="كيس">كيس</option>
+                                <option value="كيلوجرام">كيلوجرام (كجم)</option>
+                                <option value="جرام">جرام (جم)</option>
+                                <option value="لتر">لتر</option>
+                                <option value="مللي لتر">مللي لتر (مل)</option>
+                            </select>
+                            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">
+                                كل أرصدة المخزن هتتحسب بالوحدة دي.
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">حد التنبيه (أقل كمية)</label>
+                            <input asp-for="MinStockAlert" type="number" class="form-control" min="0">
+                        </div>
+                    </div>
+
+                    @* ══ تعبئة المخزن ══ *@
+                    <div style="border-top:1px dashed var(--border);margin-top:12px;padding-top:12px">
+                        <div style="font-weight:700;font-size:13px;margin-bottom:4px">📦 التعبئة (اختياري)</div>
+                        <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">
+                            لو بتستلم الصنف ده بالكرتونة أو الشوال، حدد اسم العبوة وهي بتشيل كام وحدة.
+                            وقتها تقدر تسجّل الوارد والمنصرف بالكرتونة والنظام هيحوّلها للوحدة الأساسية لوحده.
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                            <div class="form-group" style="margin:0">
+                                <label class="form-label">اسم العبوة</label>
+                                <input asp-for="PackagingName" class="form-control" placeholder="مثال: كرتونة / شوال / درزن" list="packagingOptions">
+                                <datalist id="packagingOptions">
+                                    <option value="كرتونة"></option>
+                                    <option value="شوال"></option>
+                                    <option value="درزن"></option>
+                                    <option value="صندوق"></option>
+                                    <option value="باكو"></option>
+                                </datalist>
+                            </div>
+                            <div class="form-group" style="margin:0">
+                                <label class="form-label">العبوة تشيل كام وحدة؟</label>
+                                <input asp-for="UnitsPerPackage" type="number" step="0.001" min="1" class="form-control" placeholder="مثال: 12">
+                            </div>
+                        </div>
+                    </div>
+
+                    @* ══ التقديم بالكوب/الحصة ══ *@
+                    <div style="border-top:1px dashed var(--border);margin-top:12px;padding-top:12px">
+                        <div style="font-weight:700;font-size:13px;margin-bottom:4px">☕ البيع بالحصة (اختياري)</div>
+                        <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">
+                            للأصناف اللي بتيجي بالكيلو أو اللتر لكن بتتباع بالكوب أو الحصة.
+                            مثال: القهوة وحدتها «كيلوجرام» وبتتباع «كباية»، والكيلو بيطلّع 10 كبايات.
+                            وقت التوزيع لو بعت 2 كيلو للفرع، الكاشير هيشوف 20 كباية.
+                            سيبها فاضية لو الصنف بيتباع بنفس وحدة المخزن.
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                            <div class="form-group" style="margin:0">
+                                <label class="form-label">اسم الحصة</label>
+                                <input asp-for="ServingName" class="form-control" placeholder="مثال: كباية / طبق / شريحة" list="servingOptions">
+                                <datalist id="servingOptions">
+                                    <option value="كباية"></option>
+                                    <option value="كوب"></option>
+                                    <option value="طبق"></option>
+                                    <option value="حصة"></option>
+                                    <option value="شريحة"></option>
+                                </datalist>
+                            </div>
+                            <div class="form-group" style="margin:0">
+                                <label class="form-label">الوحدة الواحدة تطلّع كام حصة؟</label>
+                                <input asp-for="ServingsPerUnit" type="number" step="0.001" min="1" class="form-control" placeholder="مثال: 10">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                @* ══ أزرار الحفظ ════════════════════════════════════ *@
+                <div style="display:flex;gap:10px;justify-content:flex-end;padding-top:16px;border-top:1px solid var(--border)">
+                    <a href="/Admin/Products" class="btn btn-outline">إلغاء</a>
+                    <button type="submit" class="btn btn-accent" style="min-width:150px">
+                        <span>@(isEdit ? "💾" : "➕")</span>
+                        <span>@(isEdit ? "حفظ التعديلات" : "إضافة المنتج")</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        /* ── Branches multi-select ────────────────────────────────── */
+        function toggleBranchLabel(id, color) {
+            const cb    = document.getElementById('branch-cb-' + id);
+            const label = document.getElementById('branch-label-' + id);
+            cb.checked  = !cb.checked;
+            if (cb.checked) {
+                label.style.borderColor = color;
+                label.style.background  = color + '18';
+                label.style.color       = color;
+            } else {
+                label.style.borderColor = 'var(--border-color)';
+                label.style.background  = 'var(--card-bg)';
+                label.style.color       = 'var(--text-muted)';
+            }
+        }
+
+        /* ── Sell type toggle ─────────────────────────────────────── */
+        function toggleSellType(isByBox) {
+            document.getElementById('hiddenSellByBox').value = isByBox ? 'true' : 'false';
+            document.getElementById('boxSection').style.display  = isByBox ? 'block' : 'none';
+            document.getElementById('unitSection').style.display = isByBox ? 'none' : 'grid';
+            document.getElementById('unit-label').style.background = isByBox ? '' : 'var(--primary-light)';
+            document.getElementById('box-label').style.background  = isByBox ? 'var(--primary-light)' : '';
+        }
+
+        /* ── Box prices calculator ────────────────────────────────── */
+        function calcBoxPrices() {
+            const units    = parseInt(document.getElementById('unitsPerBox').value)    || 0;
+            const costBox  = parseFloat(document.getElementById('boxCostPrice').value) || 0;
+            const sellBox  = parseFloat(document.getElementById('boxSellPrice').value) || 0;
+            const result   = document.getElementById('boxCalcResult');
+            if (units > 0 && sellBox > 0) {
+                const unitSell   = sellBox  / units;
+                const unitCost   = costBox  / units;
+                const unitProfit = unitSell - unitCost;
+                const margin     = unitSell > 0 ? (unitProfit / unitSell * 100).toFixed(1) : 0;
+                document.getElementById('unitSellCalc').textContent   = unitSell.toFixed(2)   + ' ج.م';
+                document.getElementById('unitCostCalc').textContent   = unitCost.toFixed(2)   + ' ج.م';
+                document.getElementById('unitProfitCalc').textContent = unitProfit.toFixed(2) + ' ج.م';
+                document.getElementById('unitMarginCalc').textContent = margin + '%';
+                result.style.display = 'flex';
+            } else {
+                result.style.display = 'none';
+            }
+        }
+
+        /* ── Unit price profit ────────────────────────────────────── */
+        function calcUnitProfit() {
+            const price  = parseFloat(document.getElementById('unitPrice').value)     || 0;
+            const cost   = parseFloat(document.getElementById('unitCostPrice').value) || 0;
+            const profit = price - cost;
+            const margin = price > 0 ? (profit / price * 100).toFixed(1) : 0;
+            const el     = document.getElementById('unitProfitAlert');
+            if (price > 0) {
+                el.style.display    = 'block';
+                el.style.background = profit >= 0 ? '#22c55e15' : '#ef444415';
+                el.style.border     = `1px solid ${profit >= 0 ? '#22c55e' : '#ef4444'}44`;
+                el.style.color      = profit >= 0 ? '#15803d' : '#b91c1c';
+                el.innerHTML        = `💹 ربح الوحدة: <strong>${profit.toFixed(2)} ج.م</strong> &nbsp;|&nbsp; الهامش: <strong>${margin}%</strong>`;
+            } else {
+                el.style.display = 'none';
+            }
+        }
+
+        function autoCalcUnitCost() {
+            const price = parseFloat(document.getElementById('unitPrice').value) || 0;
+            if (price <= 0) { Toast && Toast.warning('أدخل سعر البيع أولاً'); return; }
+            document.getElementById('unitCostPrice').value = (price * 0.75).toFixed(2);
+            calcUnitProfit();
+        }
+
+        /* ── Tax override ─────────────────────────────────────────── */
+        function toggleTaxOverride() {
+            const checked = document.getElementById('taxOverrideCheck').checked;
+            document.getElementById('taxDefaultInfo').style.display    = checked ? 'none'  : 'flex';
+            document.getElementById('taxOverrideSection').style.display = checked ? 'block' : 'none';
+            if (!checked) document.getElementById('taxOverrideInput').value = '';
+        }
+
+        function showTaxPreview() {
+            const rate = parseFloat(document.getElementById('taxOverrideInput').value);
+            const preview = document.getElementById('taxPreview');
+            if (rate >= 0) {
+                preview.textContent = `مثال: منتج بـ 100 ج.م = ${(rate).toFixed(1)} ج.م ضريبة = ${(100+rate).toFixed(1)} ج.م إجمالي`;
+            }
+        }
+
+        /* ── Stock toggle ─────────────────────────────────────────── */
+        function toggleStock() {
+            document.getElementById('stockSection').style.display =
+                document.getElementById('trackStock').checked ? 'block' : 'none';
+        }
+
+        /* ── Init ─────────────────────────────────────────────────── */
+        document.addEventListener('DOMContentLoaded', () => {
+            toggleStock();
+            const isByBox = document.getElementById('hiddenSellByBox').value === 'true';
+            toggleSellType(isByBox);
+            if (isByBox) {
+                calcBoxPrices();
+            } else {
+                // Seed hidden fields from visible inputs (which have model values on edit)
+                const vPrice = document.getElementById('unitPrice')?.value;
+                const vCost  = document.getElementById('unitCostPrice')?.value;
+                // Only overwrite hidden if visible has a real value (edit mode)
+                if (vPrice && parseFloat(vPrice) > 0)
+                    document.getElementById('hiddenPrice').value = vPrice;
+                if (vCost && parseFloat(vCost) >= 0)
+                    document.getElementById('hiddenCostPrice').value = vCost;
+                calcUnitProfit();
+            }
+            if (document.getElementById('taxOverrideCheck').checked) showTaxPreview();
+
+            // Name sync
+            const nameAr = document.querySelector('[name="NameAr"]');
+            const hidName = document.getElementById('hiddenName');
+            if (nameAr && hidName) {
+                nameAr.addEventListener('input', () => hidName.value = nameAr.value);
+                if (!hidName.value && nameAr.value) hidName.value = nameAr.value;
+            }
+        });
+
+        /* Sync unit price inputs to the hidden model fields */
+        function syncPrices() {
+            const price = document.getElementById('unitPrice')?.value     || '0';
+            const cost  = document.getElementById('unitCostPrice')?.value || '0';
+            document.getElementById('hiddenPrice').value     = price;
+            document.getElementById('hiddenCostPrice').value = cost;
+        }
+
+        /* Before submit: validate and populate hidden price fields */
+        function showMsg(msg) {
+            // Safe error display - works even if Toast not loaded
+            try { Toast.error(msg); } catch(e) { alert(msg); }
+        }
+
+        function prepareSubmit(e) {
+            try {
+                const isByBox = document.getElementById('hiddenSellByBox').value === 'true';
+
+                // Validate name
+                const nameAr = document.querySelector('[name="NameAr"]');
+                if (!nameAr || !nameAr.value.trim()) {
+                    showMsg('يرجى إدخال اسم المنتج');
+                    nameAr?.focus();
+                    e.preventDefault(); return false;
+                }
+
+                if (isByBox) {
+                    const units   = parseInt(document.getElementById('unitsPerBox')?.value)    || 1;
+                    const sellBox = parseFloat(document.getElementById('boxSellPrice')?.value) || 0;
+                    const costBox = parseFloat(document.getElementById('boxCostPrice')?.value) || 0;
+                    if (sellBox <= 0) {
+                        showMsg('يرجى إدخال سعر بيع الكرتون');
+                        document.getElementById('boxSellPrice')?.focus();
+                        e.preventDefault(); return false;
+                    }
+                    document.getElementById('hiddenPrice').value     = (sellBox / units).toFixed(4);
+                    document.getElementById('hiddenCostPrice').value = (costBox / units).toFixed(4);
+                } else {
+                    const p = parseFloat(document.getElementById('unitPrice')?.value) || 0;
+                    const c = parseFloat(document.getElementById('unitCostPrice')?.value) || 0;
+                    if (p <= 0) {
+                        showMsg('يرجى إدخال سعر البيع');
+                        document.getElementById('unitPrice')?.focus();
+                        e.preventDefault(); return false;
+                    }
+                    document.getElementById('hiddenPrice').value     = p;
+                    document.getElementById('hiddenCostPrice').value = c;
+                }
+
+                // Validate category
+                const cat = document.getElementById('categorySelect') || document.querySelector('[name="CategoryId"]');
+                if (!cat || !cat.value || cat.value === '0' || cat.value === '') {
+                    showMsg('يرجى اختيار الفئة');
+                    cat?.focus();
+                    e.preventDefault(); return false;
+                }
+
+                // Validate at least one branch
+                const checkedBranches = document.querySelectorAll('[name="selectedBranchIds"]:checked');
+                if (checkedBranches.length === 0) {
+                    showMsg('يرجى اختيار فرع واحد على الأقل');
+                    e.preventDefault(); return false;
+                }
+
+                return true;
+            } catch(err) {
+                // Never let a JS error silently submit the form with empty values
+                console.error('prepareSubmit error:', err);
+                e.preventDefault();
+                alert('حدث خطأ في التحقق: ' + err.message);
+                return false;
+            }
+        }
+    </script>
+}

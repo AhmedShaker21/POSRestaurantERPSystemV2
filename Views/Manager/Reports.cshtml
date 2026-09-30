@@ -1,0 +1,75 @@
+@{
+    ViewData["Title"] = "Manager Reports";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title" data-t="reports">Reports</h1>
+        <p class="page-subtitle" data-t="managerReports">Performance overview for your shift</p>
+    </div>
+    <div class="d-flex gap-2">
+        <select id="reportDays" class="form-control" style="max-width:160px" onchange="loadData()">
+            <option value="7">Last 7 Days</option>
+            <option value="30" selected>Last 30 Days</option>
+        </select>
+        <a href="/Manager/Index" class="btn btn-outline"><i class="fas fa-arrow-left me-2"></i>Dashboard</a>
+    </div>
+</div>
+
+<div class="stats-grid" id="statsGrid" style="margin-bottom:24px">
+    <div class="stat-card"><div class="stat-icon" style="background:#45B7D122;color:#45B7D1"><i class="fas fa-coins"></i></div><div class="stat-value" id="s1">—</div><div class="stat-label">Total Revenue</div></div>
+    <div class="stat-card"><div class="stat-icon" style="background:#4CAF5022;color:#4CAF50"><i class="fas fa-receipt"></i></div><div class="stat-value" id="s2">—</div><div class="stat-label">Total Orders</div></div>
+    <div class="stat-card"><div class="stat-icon" style="background:#FF980022;color:#FF9800"><i class="fas fa-chart-bar"></i></div><div class="stat-value" id="s3">—</div><div class="stat-label">Avg Order Value</div></div>
+    <div class="stat-card"><div class="stat-icon" style="background:#96CEB422;color:#96CEB4"><i class="fas fa-percentage"></i></div><div class="stat-value" id="s4">—</div><div class="stat-label">Growth</div></div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px">
+    <div class="card">
+        <div class="card-header"><h3 class="card-title">Revenue Trend</h3></div>
+        <div class="card-body" style="padding:20px"><canvas id="trendChart" height="120"></canvas></div>
+    </div>
+    <div class="card">
+        <div class="card-header"><h3 class="card-title">Top Products</h3></div>
+        <div class="card-body" style="padding:20px" id="topProductsBody">
+            <div style="text-align:center;color:var(--text-muted);padding:40px"><i class="fas fa-spinner fa-spin fa-2x"></i></div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+let trendChart;
+async function loadData() {
+    const days = document.getElementById('reportDays').value;
+    try {
+        const data = await API.get(`/Admin/GetReportData?days=${days}`);
+        document.getElementById('s1').textContent = `${(data.totalRevenue||0).toFixed(0)} EGP`;
+        document.getElementById('s2').textContent = data.totalOrders || 0;
+        document.getElementById('s3').textContent = `${(data.avgOrderValue||0).toFixed(2)} EGP`;
+        document.getElementById('s4').textContent = `${(data.revenueGrowth||0).toFixed(1)}%`;
+
+        if (trendChart) trendChart.destroy();
+        const chartData = data.dailySales || [];
+        trendChart = createChart('trendChart', {
+            type: 'line',
+            data: { labels: chartData.map(d=>d.date), datasets: [{ label: 'Revenue', data: chartData.map(d=>d.revenue), tension: 0.4, fill: true }] },
+            options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+        });
+
+        const prods = data.topProducts || [];
+        const max = prods[0]?.totalQty || 1;
+        document.getElementById('topProductsBody').innerHTML = prods.slice(0,8).map((p,i) => `
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                <span style="width:20px;text-align:center;font-weight:700;color:var(--primary);font-size:12px">${i+1}</span>
+                <div style="flex:1">
+                    <div style="font-size:13px;font-weight:600;margin-bottom:3px">${p.productName}</div>
+                    <div style="background:var(--bg-secondary);border-radius:3px;height:5px"><div style="width:${(p.totalQty/max*100).toFixed(0)}%;background:var(--primary);height:100%;border-radius:3px"></div></div>
+                </div>
+                <div style="font-size:12px;font-weight:600">${p.totalQty}</div>
+            </div>`).join('') || '<div style="color:var(--text-muted);text-align:center;padding:20px">No data</div>';
+    } catch(e) { Toast.error('Failed to load report'); }
+}
+document.addEventListener('DOMContentLoaded', loadData);
+</script>
+}

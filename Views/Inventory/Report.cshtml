@@ -1,0 +1,227 @@
+@model RestaurantERP.Controllers.InventoryReportViewModel
+@{
+    ViewData["Title"] = "تقرير المخزن";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.PageTitle = "تقرير المخزن";
+    string N(decimal d) => d.ToString("0.###");
+    string M(decimal d) => d.ToString("N2");
+
+    string TypeAr(RestaurantERP.Models.InventoryLogType t) => t switch
+    {
+        RestaurantERP.Models.InventoryLogType.Waste => "هالك",
+        RestaurantERP.Models.InventoryLogType.ReturnToWarehouse => "مرتجع للمخزن",
+        _ => "تسوية جرد"
+    };
+}
+
+<div class="page-header no-print">
+    <div>
+        <h1 class="page-title">📊 تقرير المخزن</h1>
+        <p class="page-subtitle">من @Model.From.ToString("yyyy-MM-dd") إلى @Model.To.ToString("yyyy-MM-dd")</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline" href="/Inventory/Dashboard">⬅ لوحة المخزن</a>
+        <button class="btn btn-primary" onclick="window.print()">🖨️ طباعة</button>
+    </div>
+</div>
+
+<div class="card no-print" style="margin-bottom:20px">
+    <div class="card-body">
+        <form method="get" class="d-flex gap-3 align-items-end" style="flex-wrap:wrap">
+            <div class="form-group" style="margin:0">
+                <label class="form-label">من تاريخ</label>
+                <input type="date" name="from" class="form-control" value="@Model.From.ToString("yyyy-MM-dd")">
+            </div>
+            <div class="form-group" style="margin:0">
+                <label class="form-label">إلى تاريخ</label>
+                <input type="date" name="to" class="form-control" value="@Model.To.ToString("yyyy-MM-dd")">
+            </div>
+            <button type="submit" class="btn btn-primary">تحديث التقرير</button>
+        </form>
+    </div>
+</div>
+
+<div class="print-only" style="text-align:center;margin-bottom:16px">
+    <h2>تقرير المخزن</h2>
+    <p>من @Model.From.ToString("yyyy-MM-dd") إلى @Model.To.ToString("yyyy-MM-dd")</p>
+</div>
+
+<div class="stats-grid" style="margin-bottom:24px">
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#4CAF5022;color:#4CAF50"><i class="fas fa-file-invoice-dollar"></i></div>
+        <div class="stat-value">@M(Model.TotalPurchases)</div>
+        <div class="stat-label">إجمالي المشتريات (@Model.ReceiptCount إيصال)</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#EF444422;color:#EF4444"><i class="fas fa-hand-holding-usd"></i></div>
+        <div class="stat-value">@M(Model.UnpaidToSuppliers)</div>
+        <div class="stat-label">غير مسدد للموردين</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#FF980022;color:#FF9800"><i class="fas fa-dolly"></i></div>
+        <div class="stat-value">@M(Model.TotalDistributedValue)</div>
+        <div class="stat-label">قيمة المنصرف للفروع</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#78716C22;color:#78716C"><i class="fas fa-trash"></i></div>
+        <div class="stat-value">@M(Model.TotalWasteValue)</div>
+        <div class="stat-label">قيمة الهالك</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#8B5CF622;color:#8B5CF6"><i class="fas fa-boxes"></i></div>
+        <div class="stat-value">@M(Model.Summary.Sum(s => s.ClosingValue))</div>
+        <div class="stat-label">قيمة رصيد آخر المدة</div>
+    </div>
+</div>
+
+@* ═════ MOVEMENT SUMMARY — the accountant's main view ═════ *@
+<div class="card" style="margin-bottom:20px">
+    <div class="card-header"><h3 class="card-title">📋 ملخص حركة الأصناف (أول المدة / وارد / منصرف / آخر المدة)</h3></div>
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr><th>الصنف</th><th>الوحدة</th><th>أول المدة</th><th>وارد</th><th>منصرف</th><th>آخر المدة</th><th>سعر التكلفة</th><th>قيمة الرصيد</th><th class="no-print"></th></tr>
+            </thead>
+            <tbody>
+                @if (!Model.Summary.Any())
+                {
+                    <tr><td colspan="9" style="text-align:center;color:var(--text-muted)">لا توجد حركات في هذه الفترة</td></tr>
+                }
+                @foreach (var s in Model.Summary)
+                {
+                    <tr>
+                        <td style="font-weight:600">@s.Product</td>
+                        <td>@s.Unit</td>
+                        <td>@N(s.Opening)</td>
+                        <td style="color:#4CAF50"><strong>@N(s.In)</strong></td>
+                        <td style="color:#FF9800"><strong>@N(s.Out)</strong></td>
+                        <td><strong>@N(s.Closing)</strong></td>
+                        <td>@M(s.CostPrice)</td>
+                        <td><strong>@M(s.ClosingValue)</strong></td>
+                        <td class="no-print"><a class="btn btn-sm btn-outline" href="/Inventory/ProductCard?id=@s.ProductId&from=@Model.From.ToString("yyyy-MM-dd")&to=@Model.To.ToString("yyyy-MM-dd")">كارت الصنف</a></td>
+                    </tr>
+                }
+            </tbody>
+            @if (Model.Summary.Any())
+            {
+                <tfoot>
+                    <tr>
+                        <td colspan="7" style="text-align:left;font-weight:900">إجمالي قيمة المخزون آخر المدة</td>
+                        <td style="font-weight:900">@M(Model.Summary.Sum(s => s.ClosingValue))</td>
+                        <td class="no-print"></td>
+                    </tr>
+                </tfoot>
+            }
+        </table>
+    </div>
+</div>
+
+@* ═════ SUPPLY ═════ *@
+<div class="card" style="margin-bottom:20px">
+    <div class="card-header"><h3 class="card-title">📥 الوارد (ايصالات التوريد)</h3></div>
+    <div class="table-container">
+        <table class="data-table">
+            <thead><tr><th>التاريخ</th><th>رقم الإيصال</th><th>الصنف</th><th>الكمية</th><th>سعر الوحدة</th><th>القيمة</th><th>المورد</th><th>بواسطة</th></tr></thead>
+            <tbody>
+                @if (!Model.Supply.Any())
+                {
+                    <tr><td colspan="8" style="text-align:center;color:var(--text-muted)">لا يوجد وارد في هذه الفترة</td></tr>
+                }
+                @foreach (var s in Model.Supply)
+                {
+                    <tr>
+                        <td>@s.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                        <td><span class="badge badge-primary">@s.ReceiptNumber</span></td>
+                        <td>@s.Product</td>
+                        <td><strong>@s.QuantityText</strong></td>
+                        <td>@(s.UnitCost.HasValue ? M(s.UnitCost.Value) : "—")</td>
+                        <td><strong>@(s.LineValue.HasValue ? M(s.LineValue.Value) : "—")</strong></td>
+                        <td>@(s.SupplierName ?? "—")</td>
+                        <td>@s.By</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@* ═════ DISTRIBUTION ═════ *@
+<div class="card" style="margin-bottom:20px">
+    <div class="card-header"><h3 class="card-title">📤 المنصرف (موزَّع على الفروع)</h3></div>
+    <div class="table-container">
+        <table class="data-table">
+            <thead><tr><th>التاريخ</th><th>الصنف</th><th>الفرع</th><th>الكمية</th><th>القيمة</th><th>هتكفي كام يوم</th><th>التكلفة اليومية</th><th>بواسطة</th></tr></thead>
+            <tbody>
+                @if (!Model.Distribution.Any())
+                {
+                    <tr><td colspan="8" style="text-align:center;color:var(--text-muted)">لا يوجد منصرف في هذه الفترة</td></tr>
+                }
+                @foreach (var d in Model.Distribution)
+                {
+                    <tr>
+                        <td>@d.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                        <td>@d.Product</td>
+                        <td><span class="badge badge-primary">@d.Branch</span></td>
+                        <td><strong>@d.QuantityText</strong></td>
+                        <td>@(d.LineValue.HasValue ? M(d.LineValue.Value) : "—")</td>
+                        <td>@(d.ExpectedDurationDays?.ToString() ?? "—")</td>
+                        <td>@(d.DailyCost.HasValue ? M(d.DailyCost.Value) + " ج.م/يوم" : "—")</td>
+                        <td>@d.By</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@* ═════ NEW PRODUCTS ═════ *@
+@if (Model.NewProducts.Any())
+{
+    <div class="card" style="margin-bottom:20px">
+        <div class="card-header"><h3 class="card-title">🆕 أصناف جديدة أُضيفت</h3></div>
+        <div class="table-container">
+            <table class="data-table">
+                <thead><tr><th>التاريخ</th><th>الصنف</th><th>الرصيد الافتتاحي</th><th>بواسطة</th></tr></thead>
+                <tbody>
+                    @foreach (var n in Model.NewProducts)
+                    {
+                        <tr>
+                            <td>@n.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td>@n.Product</td>
+                            <td><strong>@n.QuantityText</strong></td>
+                            <td>@n.By</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@* ═════ ADJUSTMENTS / WASTE ═════ *@
+@if (Model.Adjustments.Any())
+{
+    <div class="card" style="margin-bottom:20px">
+        <div class="card-header"><h3 class="card-title">⚙️ تسويات وهالك ومرتجعات</h3></div>
+        <div class="table-container">
+            <table class="data-table">
+                <thead><tr><th>التاريخ</th><th>النوع</th><th>الصنف</th><th>الفرع</th><th>الكمية</th><th>القيمة</th><th>السبب</th><th>بواسطة</th></tr></thead>
+                <tbody>
+                    @foreach (var a in Model.Adjustments)
+                    {
+                        <tr>
+                            <td>@a.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td><span class="badge badge-primary">@TypeAr(a.Type)</span></td>
+                            <td>@a.Product</td>
+                            <td>@(a.Branch ?? "—")</td>
+                            <td><strong>@a.QuantityText</strong></td>
+                            <td>@(a.LineValue.HasValue ? M(a.LineValue.Value) : "—")</td>
+                            <td>@a.Reason</td>
+                            <td>@a.By</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}

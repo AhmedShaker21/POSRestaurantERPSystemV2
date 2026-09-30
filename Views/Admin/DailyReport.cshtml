@@ -1,0 +1,259 @@
+@model RestaurantERP.Controllers.DailyReportViewModel
+@{
+    ViewData["Title"] = "التقرير اليومي";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.PageTitle = "التقرير اليومي";
+    var branches = ViewBag.Branches as List<RestaurantERP.Models.Branch> ?? new();
+}
+
+<div class="page-header no-print">
+    <div>
+        <h1 class="page-title">🧾 التقرير اليومي</h1>
+        <p class="page-subtitle">@Model.Date.ToString("yyyy-MM-dd") — @Model.DayNameAr</p>
+    </div>
+    <button class="btn btn-primary" onclick="window.print()">🖨️ طباعة</button>
+</div>
+
+<div class="print-only" style="text-align:center;margin-bottom:16px">
+    <h2>التقرير اليومي</h2>
+    <p>@Model.Date.ToString("yyyy-MM-dd") — @Model.DayNameAr</p>
+</div>
+
+<div class="card no-print" style="margin-bottom:20px">
+    <div class="card-body">
+        <form method="get" class="d-flex gap-3 align-items-end" style="flex-wrap:wrap">
+            <div class="form-group" style="margin:0">
+                <label class="form-label">اليوم</label>
+                <input type="date" name="date" class="form-control" value="@Model.Date.ToString("yyyy-MM-dd")">
+            </div>
+            <div class="form-group" style="margin:0">
+                <label class="form-label">الفرع</label>
+                <select name="branchId" class="form-control">
+                    <option value="">كل الفروع</option>
+                    @foreach (var b in branches)
+                    {
+                        <option value="@b.Id" selected="@(ViewBag.BranchId != null && (int)ViewBag.BranchId == b.Id)">@b.NameAr</option>
+                    }
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">تحديث</button>
+        </form>
+    </div>
+</div>
+
+<div id="printArea">
+
+<div class="stats-grid" style="margin-bottom:16px">
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#4CAF5022;color:#4CAF50"><i class="fas fa-coins"></i></div>
+        <div class="stat-value">@Model.GrossSales.ToString("0.##")</div>
+        <div class="stat-label">إجمالي المبيعات</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#16A34A22;color:#16A34A"><i class="fas fa-cash-register"></i></div>
+        <div class="stat-value">@Model.CollectedSales.ToString("0.##")</div>
+        <div class="stat-label">المُحصَّل فعليًا</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#DC262622;color:#DC2626"><i class="fas fa-hourglass-half"></i></div>
+        <div class="stat-value">@Model.OutstandingSales.ToString("0.##")</div>
+        <div class="stat-label">حسابات مفتوحة لم تُحصّل (@Model.OpenTabsCount)</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#FF6B6B22;color:#FF6B6B"><i class="fas fa-undo"></i></div>
+        <div class="stat-value">@Model.RefundedAmount.ToString("0.##")</div>
+        <div class="stat-label">إجمالي المرتجعات (@Model.Refunds.Count)</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#45B7D122;color:#45B7D1"><i class="fas fa-wallet"></i></div>
+        <div class="stat-value">@Model.NetSales.ToString("0.##")</div>
+        <div class="stat-label">صافي المبيعات</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#FFC10722;color:#FFC107"><i class="fas fa-receipt"></i></div>
+        <div class="stat-value">@Model.OrdersCount</div>
+        <div class="stat-label">عدد الطلبات (متوسط @Model.AvgOrder.ToString("0.##"))</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#9E9E9E22;color:#9E9E9E"><i class="fas fa-ban"></i></div>
+        <div class="stat-value">@Model.CancelledCount</div>
+        <div class="stat-label">طلبات ملغاة</div>
+    </div>
+</div>
+
+<div class="stats-grid" style="margin-bottom:24px">
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#FF980022;color:#FF9800"><i class="fas fa-box-open"></i></div>
+        <div class="stat-value">@Model.EstimatedCogs.ToString("0.##")</div>
+        <div class="stat-label">تكلفة البضاعة المستخدمة اليوم (مقدّرة من التوزيع)</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#8B5CF622;color:#8B5CF6"><i class="fas fa-truck-loading"></i></div>
+        <div class="stat-value">@Model.WarehousePurchases.ToString("0.##")</div>
+        <div class="stat-label">مشتريات المخزن اليوم (ايصالات توريد)</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#4CAF5022;color:#4CAF50"><i class="fas fa-chart-line"></i></div>
+        <div class="stat-value">@Model.EstimatedProfit.ToString("0.##")</div>
+        <div class="stat-label">الربح اليومي التقديري (صافي المبيعات − تكلفة البضاعة)</div>
+    </div>
+</div>
+
+<div class="card" style="margin-bottom:20px">
+    <div class="card-header"><h3 class="card-title">📦 تكلفة البضاعة المستخدمة اليوم (حسب التوزيع على الفروع)</h3></div>
+    <div class="table-container">
+        <table class="data-table">
+            <thead><tr><th>المنتج</th><th>الفرع</th><th>الكمية الموزعة</th><th>هتكفي كام يوم</th><th>اليوم رقم</th><th>نصيب اليوم من التكلفة</th></tr></thead>
+            <tbody>
+                @if (!Model.CostBreakdown.Any())
+                {
+                    <tr><td colspan="6" style="text-align:center;color:var(--text-muted)">لا توجد كميات موزعة نشطة في هذا اليوم</td></tr>
+                }
+                @foreach (var c in Model.CostBreakdown)
+                {
+                    <tr>
+                        <td>@c.Product</td>
+                        <td><span class="badge badge-primary">@c.Branch</span></td>
+                        <td>@c.DistributedQuantity.ToString("0.###")</td>
+                        <td>@c.ExpectedDurationDays يوم</td>
+                        <td>يوم @c.DayNumberInBatch من @c.ExpectedDurationDays</td>
+                        <td><strong>@c.DailyPortion.ToString("0.##") ج.م</strong></td>
+                    </tr>
+                }
+            </tbody>
+            @if (Model.CostBreakdown.Any())
+            {
+                <tfoot><tr><td colspan="5" style="text-align:left;font-weight:700">الإجمالي</td><td style="font-weight:700">@Model.EstimatedCogs.ToString("0.##") ج.م</td></tr></tfoot>
+            }
+        </table>
+    </div>
+</div>
+
+<div class="card" style="margin-bottom:20px">
+    <div class="card-header"><h3 class="card-title">🍽️ ماذا بيع بالضبط اليوم</h3></div>
+    <div class="table-container">
+        <table class="data-table">
+            <thead><tr><th>المنتج</th><th>الكمية المباعة</th><th>الإيراد</th></tr></thead>
+            <tbody>
+                @if (!Model.SoldItems.Any())
+                {
+                    <tr><td colspan="3" style="text-align:center;color:var(--text-muted)">لا توجد مبيعات في هذا اليوم</td></tr>
+                }
+                @foreach (var i in Model.SoldItems)
+                {
+                    <tr>
+                        <td>@i.ProductName</td>
+                        <td><strong>@i.Quantity</strong></td>
+                        <td>@i.Revenue.ToString("0.##") ج.م</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card" style="margin-bottom:20px">
+    <div class="card-header"><h3 class="card-title">💳 طرق الدفع</h3></div>
+    <div class="table-container">
+        <table class="data-table">
+            <thead><tr><th>طريقة الدفع</th><th>عدد الطلبات</th><th>الإجمالي</th></tr></thead>
+            <tbody>
+                @foreach (var p in Model.PaymentBreakdown)
+                {
+                    <tr><td>@p.Method</td><td>@p.Count</td><td>@p.Total.ToString("0.##") ج.م</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card" style="margin-bottom:20px">
+    <div class="card-header"><h3 class="card-title">📋 كل الطلبات المكتملة</h3></div>
+    <div class="table-container">
+        <table class="data-table">
+            <thead><tr><th>رقم الطلب</th><th>الوقت</th><th>النوع</th><th>الطاولة</th><th>الكاشير</th><th>طريقة الدفع</th><th>الإجمالي</th><th>التحصيل</th><th>الحالة</th></tr></thead>
+            <tbody>
+                @foreach (var o in Model.SoldOrders)
+                {
+                    <tr>
+                        <td>@o.OrderNumber</td>
+                        <td>@o.CreatedAt.ToString("HH:mm")</td>
+                        <td>@o.OrderType</td>
+                        <td>@(o.Table != null ? "طاولة " + o.Table.TableNumber : "—")</td>
+                        <td>@(o.Cashier?.FullNameAr ?? o.Cashier?.UserName ?? "—")</td>
+                        <td>@o.PaymentMethod</td>
+                        <td>@o.Total.ToString("0.##")</td>
+                        <td>
+                            @if (o.IsPaid)
+                            {
+                                <span class="badge" style="background:#16A34A22;color:#16A34A">مُحصَّل @(o.PaidAt.HasValue ? o.PaidAt.Value.ToString("HH:mm") : "")</span>
+                            }
+                            else
+                            {
+                                <span class="badge" style="background:#DC262622;color:#DC2626">حساب مفتوح</span>
+                            }
+                        </td>
+                        <td>
+                            @if (o.Status == RestaurantERP.Models.OrderStatus.Refunded) { <span class="badge" style="background:#FF6B6B22;color:#FF6B6B">مرتجع بالكامل</span> }
+                            else if (o.Status == RestaurantERP.Models.OrderStatus.PartialRefund) { <span class="badge" style="background:#FF980022;color:#FF9800">مرتجع جزئي</span> }
+                            else { <span class="badge" style="background:#4CAF5022;color:#4CAF50">مكتمل</span> }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@if (Model.Refunds.Any())
+{
+    <div class="card" style="margin-bottom:20px">
+        <div class="card-header"><h3 class="card-title">🔄 المرتجعات — كل التفاصيل</h3></div>
+        <div class="table-container">
+            <table class="data-table">
+                <thead><tr><th>رقم المرتجع</th><th>الطلب الأصلي</th><th>الوقت</th><th>النوع</th><th>المبلغ</th><th>السبب</th><th>بواسطة</th></tr></thead>
+                <tbody>
+                    @foreach (var r in Model.Refunds)
+                    {
+                        <tr>
+                            <td>@r.RefundNumber</td>
+                            <td>@r.OriginalOrder?.OrderNumber</td>
+                            <td>@r.CreatedAt.ToString("HH:mm")</td>
+                            <td>@r.RefundType</td>
+                            <td><strong>@r.RefundTotal.ToString("0.##")</strong></td>
+                            <td>@(r.Reason ?? "—")</td>
+                            <td>@(r.ProcessedBy?.FullNameAr ?? r.ProcessedBy?.UserName ?? "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@if (Model.CancelledOrders.Any())
+{
+    <div class="card" style="margin-bottom:20px">
+        <div class="card-header"><h3 class="card-title">🚫 طلبات ملغاة</h3></div>
+        <div class="table-container">
+            <table class="data-table">
+                <thead><tr><th>رقم الطلب</th><th>الوقت</th><th>الإجمالي</th><th>الكاشير</th></tr></thead>
+                <tbody>
+                    @foreach (var o in Model.CancelledOrders)
+                    {
+                        <tr>
+                            <td>@o.OrderNumber</td>
+                            <td>@o.CreatedAt.ToString("HH:mm")</td>
+                            <td>@o.Total.ToString("0.##")</td>
+                            <td>@(o.Cashier?.FullNameAr ?? o.Cashier?.UserName ?? "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+</div>
+
+

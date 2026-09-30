@@ -1,0 +1,555 @@
+@model List<RestaurantERP.Models.SupplyReceipt>
+@{
+    ViewData["Title"] = "ايصالات التوريد";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.PageTitle = "ايصالات التوريد";
+    var suppliers = ViewBag.Suppliers as List<RestaurantERP.Models.Supplier> ?? new();
+    var products = ViewBag.Products as List<RestaurantERP.Models.Product> ?? new();
+    var isAdmin = (bool)(ViewBag.IsAdmin ?? false);
+    var from = (DateTime)ViewBag.From;
+    var to = (DateTime)ViewBag.To;
+    string M(decimal d) => d.ToString("N2");
+
+    // Serialized here (not inline) — a multi-line Razor expression containing { } braces
+    // can't be parsed as an implicit expression.
+    var productsJson = System.Text.Json.JsonSerializer.Serialize(
+        products.Select(p => new
+        {
+            id = p.Id,
+            name = string.IsNullOrWhiteSpace(p.NameAr) ? p.Name : p.NameAr,
+            unit = string.IsNullOrWhiteSpace(p.Unit) ? "قطعة" : p.Unit,
+            pack = p.PackagingName ?? "",
+            perPack = p.UnitsPerPackage > 0 ? p.UnitsPerPackage : 1m,
+            cost = p.CostPrice,
+            shelfLife = p.ShelfLifeDays ?? 0,
+            serving = p.ServingName ?? "",
+            perServing = p.ServingsPerUnit > 0 ? p.ServingsPerUnit : 1m
+        }),
+        new System.Text.Json.JsonSerializerOptions
+        {
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        });
+}
+
+<div class="page-header no-print">
+    <div>
+        <h1 class="page-title">📥 ايصالات التوريد (الوارد)</h1>
+        <p class="page-subtitle">@Model.Count إيصال — إجمالي @M(Model.Sum(r => r.TotalCost)) ج.م</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline" href="/Inventory/Dashboard">⬅ لوحة المخزن</a>
+        <button class="btn btn-primary" onclick="window.print()">🖨️ طباعة</button>
+        @if (isAdmin)
+        {
+            <button class="btn btn-accent" onclick="openNewReceipt()">➕ إيصال جديد</button>
+        }
+    </div>
+</div>
+
+<div class="card no-print" style="margin-bottom:20px">
+    <div class="card-body">
+        <form method="get" class="d-flex gap-3 align-items-end" style="flex-wrap:wrap">
+            <div class="form-group" style="margin:0">
+                <label class="form-label">من</label>
+                <input type="date" name="from" class="form-control" value="@from.ToString("yyyy-MM-dd")">
+            </div>
+            <div class="form-group" style="margin:0">
+                <label class="form-label">إلى</label>
+                <input type="date" name="to" class="form-control" value="@to.ToString("yyyy-MM-dd")">
+            </div>
+            <div class="form-group" style="margin:0">
+                <label class="form-label">المورد</label>
+                <select name="supplierId" class="form-control">
+                    <option value="">كل الموردين</option>
+                    @foreach (var s in suppliers)
+                    {
+                        <option value="@s.Id" selected="@(ViewBag.SupplierId != null && (int)ViewBag.SupplierId == s.Id)">@s.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="form-group" style="margin:0">
+                <label class="form-label">حالة السداد</label>
+                <select name="paid" class="form-control">
+                    <option value="">الكل</option>
+                    <option value="paid" selected="@((string?)ViewBag.Paid == "paid")">مسدد</option>
+                    <option value="unpaid" selected="@((string?)ViewBag.Paid == "unpaid")">غير مسدد</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">بحث</button>
+        </form>
+    </div>
+</div>
+
+<div class="print-only" style="text-align:center;margin-bottom:16px">
+    <h2>ايصالات التوريد</h2>
+    <p>من @from.ToString("yyyy-MM-dd") إلى @to.ToString("yyyy-MM-dd")</p>
+</div>
+
+<div class="card">
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>رقم الإيصال</th><th>التاريخ</th><th>المورد</th><th>عدد الأصناف</th>
+                    <th>الإجمالي</th><th>المسدد</th><th>المتبقي</th><th>الحالة</th><th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!Model.Any())
+                {
+                    <tr><td colspan="9" style="text-align:center;color:var(--text-muted)">لا توجد إيصالات في هذه الفترة</td></tr>
+                }
+                @foreach (var r in Model)
+                {
+                    <tr>
+                        <td><span class="badge badge-primary">@r.ReceiptNumber</span></td>
+                        <td>@r.Date.ToString("yyyy-MM-dd")</td>
+                        <td>@(r.Supplier?.Name ?? r.SupplierNameSnapshot ?? "—")</td>
+                        <td>@r.Items.Count</td>
+                        <td><strong>@M(r.TotalCost)</strong></td>
+                        <td>@M(r.AmountPaid)</td>
+                        <td>@M(r.Outstanding)</td>
+                        <td>
+                            @if (r.IsPaid)
+                            {
+                                <span class="badge" style="background:#4CAF5022;color:#4CAF50">مسدد</span>
+                            }
+                            else
+                            {
+                                <span class="badge" style="background:#EF444422;color:#EF4444">غير مسدد</span>
+                            }
+                        </td>
+                        <td class="no-print" style="white-space:nowrap">
+                            <a class="btn btn-sm btn-outline" href="/Inventory/ReceiptDetail?id=@r.Id">تفاصيل</a>
+                            @if (isAdmin && !r.IsPaid)
+                            {
+                                <button class="btn btn-sm btn-primary" onclick="openSettle(@r.Id, @r.Outstanding.ToString(System.Globalization.CultureInfo.InvariantCulture))">سداد</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@if (isAdmin)
+{
+    <!-- New Receipt Modal -->
+    <div class="modal-overlay" id="receiptModal">
+        <div class="modal" style="max-width:900px">
+            <div class="modal-header">
+                <h3 class="modal-title">➕ ايصال توريد جديد</h3>
+                <button class="modal-close" onclick="Modal.close('receiptModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+                    <div class="form-group">
+                        <label class="form-label">التاريخ</label>
+                        <input type="date" id="rcDate" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">المورد</label>
+                        <select id="rcSupplierId" class="form-control">
+                            <option value="">— بدون مورد —</option>
+                            @foreach (var s in suppliers) { <option value="@s.Id">@s.Name</option> }
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">رقم فاتورة المورد</label>
+                        <input type="text" id="rcInvoice" class="form-control" placeholder="اختياري">
+                    </div>
+                </div>
+
+                <div style="border:1.5px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px">
+                    <div style="font-weight:700;font-size:13px;margin-bottom:10px">الأصناف</div>
+                    <table class="data-table" style="font-size:12px">
+                        <thead>
+                            <tr><th style="width:28%">الصنف</th><th>الكمية</th><th style="width:22%">الوحدة</th><th style="width:18%">السعر</th><th style="width:15%">الصلاحية</th><th>الإجمالي</th><th></th></tr>
+                        </thead>
+                        <tbody id="rcLines"></tbody>
+                    </table>
+                    <datalist id="servingNames">
+                        <option value="كباية"></option>
+                        <option value="كوب"></option>
+                        <option value="طبق"></option>
+                        <option value="حصة"></option>
+                        <option value="شريحة"></option>
+                    </datalist>
+                    <datalist id="packNames">
+                        <option value="كرتونة"></option>
+                        <option value="شوال"></option>
+                        <option value="صندوق"></option>
+                        <option value="درزن"></option>
+                        <option value="باكو"></option>
+                        <option value="طبق"></option>
+                    </datalist>
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:6px">
+                        الوحدة اللي تختارها هي اللي بيتحسب بيها رصيد المخزن. لو الصنف جايلك معبّأ
+                        (كرتونة/شوال) اختر «📦 عبوة» وحدد بتشيل كام وحدة، والنظام هيحوّلها تلقائيًا.
+                        اكتب المبلغ زي ما هو في فاتورة المورد واختار هو إجمالي السطر ولا سعر العبوة ولا سعر الوحدة — النظام هيقسّمه ويطلعلك تكلفة القطعة الواحدة تحت الخانة.
+                    </div>
+                    <button class="btn btn-sm btn-outline" style="margin-top:8px" onclick="addLine()">➕ إضافة صنف</button>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                    <div class="form-group">
+                        <label class="form-label">حالة السداد</label>
+                        <select id="rcPaidStatus" class="form-control" onchange="onPaidStatusChange()">
+                            <option value="paid">مسدد بالكامل</option>
+                            <option value="partial">سداد جزئي</option>
+                            <option value="unpaid">آجل (غير مسدد)</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="rcPartialRow" style="display:none">
+                        <label class="form-label">المبلغ المسدد</label>
+                        <input type="number" step="0.01" id="rcAmountPaid" class="form-control" value="0">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">ملاحظات</label>
+                    <textarea id="rcNotes" class="form-control" rows="2"></textarea>
+                </div>
+
+                <div style="text-align:left;font-size:18px;font-weight:900;padding-top:10px;border-top:1px dashed var(--border)">
+                    الإجمالي: <span id="rcTotal">0.00</span> ج.م
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="Modal.close('receiptModal')">إلغاء</button>
+                <button class="btn btn-primary" onclick="saveReceipt()">💾 حفظ الإيصال</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settle Modal -->
+    <div class="modal-overlay" id="settleModal">
+        <div class="modal" style="max-width:380px">
+            <div class="modal-header">
+                <h3 class="modal-title">💵 سداد للمورد</h3>
+                <button class="modal-close" onclick="Modal.close('settleModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">المبلغ المتبقي: <strong id="stOutstanding"></strong> ج.م</label>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">المبلغ المدفوع الآن</label>
+                    <input type="number" step="0.01" id="stAmount" class="form-control">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="Modal.close('settleModal')">إلغاء</button>
+                <button class="btn btn-primary" onclick="saveSettle()">💾 تأكيد السداد</button>
+            </div>
+        </div>
+    </div>
+}
+
+@section Scripts {
+<script>
+/* NOTE: these helpers are always defined and are NOT wrapped in a Razor
+   markup block. Inside such a block Razor treats the script as markup, so
+   the '&lt;' and '&lt;=' operators in JavaScript make it try to parse a tag
+   and fail with RZ1024. The admin-only UI is still gated in the markup above,
+   and every endpoint is [Authorize(Roles="Admin")] server-side. */
+const PRODUCTS = @Html.Raw(productsJson);
+
+// Units the storekeeper can receive in. The first group is base units (what the
+// warehouse balance is kept in); "عبوة" means it arrives packed and we ask how many
+// base units are inside.
+const BASE_UNITS = ['قطعة','زجاجة','علبة','كيس','كيلوجرام','جرام','لتر','مللي لتر'];
+
+let lineSeq = 0;
+const fmt = n => Number(n).toFixed(3).replace(/\.?0+$/, '');
+
+function openNewReceipt() {
+    document.getElementById('rcDate').value = new Date().toISOString().slice(0,10);
+    document.getElementById('rcSupplierId').value = '';
+    document.getElementById('rcInvoice').value = '';
+    document.getElementById('rcNotes').value = '';
+    document.getElementById('rcPaidStatus').value = 'paid';
+    document.getElementById('rcAmountPaid').value = 0;
+    onPaidStatusChange();
+    document.getElementById('rcLines').innerHTML = '';
+    lineSeq = 0;
+    addLine();
+    Modal.open('receiptModal');
+}
+
+function addLine() {
+    const id = ++lineSeq;
+    const opts = PRODUCTS.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    const tr = document.createElement('tr');
+    tr.id = 'line' + id;
+    tr.innerHTML = `
+        <td>
+            <select class="form-control" style="font-size:12px;padding:4px" id="lp${id}" onchange="onLineProduct(${id})">${opts}</select>
+        </td>
+        <td><input type="number" step="0.001" min="0" class="form-control" style="font-size:12px;padding:4px;max-width:90px" id="lq${id}" oninput="recalc()"></td>
+        <td>
+            <select class="form-control" style="font-size:12px;padding:4px;min-width:110px" id="lu${id}" onchange="onUnitChange(${id})"></select>
+            <div id="lpack${id}" style="display:none;margin-top:4px">
+                <input type="text" class="form-control" style="font-size:11px;padding:3px;margin-bottom:3px" id="lpn${id}" placeholder="اسم العبوة (كرتونة)" oninput="recalc()" list="packNames">
+                <input type="number" step="0.001" min="1" class="form-control" style="font-size:11px;padding:3px" id="lpp${id}" placeholder="بتشيل كام؟" oninput="recalc()">
+            </div>
+            <details style="margin-top:4px">
+                <summary style="font-size:10px;cursor:pointer;color:var(--text-muted)">☕ بيتباع بالحصة؟</summary>
+                <input type="text" class="form-control" style="font-size:11px;padding:3px;margin:3px 0" id="lsn${id}" placeholder="اسم الحصة (كباية)" oninput="recalc()" list="servingNames">
+                <input type="number" step="0.001" min="1" class="form-control" style="font-size:11px;padding:3px" id="lsp${id}" placeholder="الوحدة تطلّع كام؟" oninput="recalc()">
+            </details>
+            <div id="lc${id}" style="font-size:10px;color:var(--text-muted);margin-top:2px"></div>
+        </td>
+        <td>
+            <input type="number" step="0.01" min="0" class="form-control" style="font-size:12px;padding:4px;max-width:100px" id="lpr${id}" placeholder="المبلغ" oninput="recalc()">
+            <select class="form-control" style="font-size:11px;padding:3px;margin-top:3px" id="lpb${id}" onchange="recalc()">
+                <option value="total">الإجمالي المدفوع</option>
+                <option value="pack">السعر للعبوة</option>
+                <option value="base">السعر للوحدة</option>
+            </select>
+            <div id="lpx${id}" style="font-size:10px;color:var(--text-muted);margin-top:2px"></div>
+        </td>
+        <td>
+            <input type="date" class="form-control" style="font-size:11px;padding:3px" id="lex${id}" onchange="recalc()">
+            <input type="number" min="1" class="form-control" style="font-size:11px;padding:3px;margin-top:3px" id="lsl${id}" placeholder="صلاحية (يوم)" oninput="applyShelfLife(${id})">
+            <div id="lexh${id}" style="font-size:10px;margin-top:2px"></div>
+        </td>
+        <td><strong id="lt${id}">0.00</strong></td>
+        <td><button class="btn btn-sm btn-outline" onclick="removeLine(${id})">✕</button></td>`;
+    document.getElementById('rcLines').appendChild(tr);
+    onLineProduct(id);
+}
+
+function removeLine(id) {
+    document.getElementById('line' + id)?.remove();
+    recalc();
+}
+
+/* Rebuild the unit dropdown for a line: every base unit, plus a packaged option. */
+function onLineProduct(id) {
+    const pid = parseInt(document.getElementById('lp' + id).value);
+    const p = PRODUCTS.find(x => x.id === pid);
+    if (!p) return;
+    const sel = document.getElementById('lu' + id);
+
+    // Product's own unit first (so it's preselected), then the rest, then "عبوة"
+    const units = [p.unit, ...BASE_UNITS.filter(u => u !== p.unit)];
+    sel.innerHTML = units.map(u => `<option value="u:${u}">${u}</option>`).join('')
+        + `<option value="pack">📦 عبوة / كرتونة …</option>`;
+
+    // If the product already has packaging defined, offer it preselected
+    if (p.pack && p.perPack > 1) {
+        sel.value = 'pack';
+        document.getElementById('lpn' + id).value = p.pack;
+        document.getElementById('lpp' + id).value = p.perPack;
+    } else {
+        sel.value = 'u:' + p.unit;
+        document.getElementById('lpn' + id).value = '';
+        document.getElementById('lpp' + id).value = '';
+    }
+
+    document.getElementById('lpr' + id).value = '';
+    if (p.shelfLife > 0) {
+        document.getElementById('lsl' + id).value = p.shelfLife;
+        applyShelfLife(id);
+    }
+    if (p.serving) {
+        document.getElementById('lsn' + id).value = p.serving;
+        document.getElementById('lsp' + id).value = p.perServing;
+    }
+    onUnitChange(id);
+}
+
+function onUnitChange(id) {
+    const isPack = document.getElementById('lu' + id).value === 'pack';
+    document.getElementById('lpack' + id).style.display = isPack ? 'block' : 'none';
+    // "السعر للعبوة" only makes sense for packed goods
+    const basisSel = document.getElementById('lpb' + id);
+    basisSel.querySelector('option[value="pack"]').disabled = !isPack;
+    if (!isPack && basisSel.value === 'pack') basisSel.value = 'total';
+    recalc();
+}
+
+function lineBaseUnit(id) {
+    const v = document.getElementById('lu' + id).value;
+    if (v.startsWith('u:')) return v.slice(2);
+    const p = PRODUCTS.find(x => x.id === parseInt(document.getElementById('lp' + id).value));
+    return p ? p.unit : 'قطعة';
+}
+
+/* Normalise whatever the user typed into a price per ENTERED unit — which is what
+   the backend expects. Three ways to say the same thing:
+     total → the lump sum paid for the whole line   (150 for 4 cartons)
+     pack  → price of one package                   (37.50 per carton)
+     base  → price of one base unit                 (3.125 per sachet)          */
+function linePricePerEntered(id) {
+    const typed = parseFloat(document.getElementById('lpr' + id).value) || 0;
+    const qty = parseFloat(document.getElementById('lq' + id).value) || 0;
+    const isPack = document.getElementById('lu' + id).value === 'pack';
+    const perPack = parseFloat(document.getElementById('lpp' + id).value) || 0;
+    const basis = document.getElementById('lpb' + id).value;
+
+    if (basis === 'total') return qty > 0 ? typed / qty : 0;
+    if (basis === 'base' && isPack) return typed * perPack;
+    return typed;
+}
+
+/* Typing a shelf life fills the expiry date from the receipt date, so the
+   storekeeper doesn't have to work it out each time. */
+function applyShelfLife(id) {
+    const days = parseInt(document.getElementById('lsl' + id).value) || 0;
+    if (days > 0) {
+        const base = document.getElementById('rcDate').value || new Date().toISOString().slice(0, 10);
+        const d = new Date(base);
+        d.setDate(d.getDate() + days);
+        document.getElementById('lex' + id).value = d.toISOString().slice(0, 10);
+    }
+    recalc();
+}
+
+function recalc() {
+    let total = 0;
+    document.querySelectorAll('#rcLines tr').forEach(tr => {
+        const id = tr.id.replace('line', '');
+        const qty = parseFloat(document.getElementById('lq' + id).value) || 0;
+        const typed = parseFloat(document.getElementById('lpr' + id).value) || 0;
+        const isPack = document.getElementById('lu' + id).value === 'pack';
+        const perPack = parseFloat(document.getElementById('lpp' + id).value) || 0;
+        const packName = document.getElementById('lpn' + id).value || 'عبوة';
+        const baseUnit = lineBaseUnit(id);
+        const basis = document.getElementById('lpb' + id).value;
+
+        const pricePerEntered = linePricePerEntered(id);
+        const lineTotal = qty * pricePerEntered;
+        total += lineTotal;
+        document.getElementById('lt' + id).textContent = lineTotal.toFixed(2);
+
+        // Always spell out the full derivation so the cost per piece is obvious
+        const px = document.getElementById('lpx' + id);
+        if (typed > 0 && qty > 0) {
+            const unitWord = isPack ? packName : baseUnit;
+            let txt = '';
+            if (basis === 'total') {
+                txt = `${typed.toFixed(2)} ÷ ${fmt(qty)} ${unitWord} = ${pricePerEntered.toFixed(2)} / ${unitWord}`;
+            } else {
+                txt = `${pricePerEntered.toFixed(2)} / ${unitWord}`;
+            }
+            if (isPack && perPack > 0) {
+                txt += ` ← ${(pricePerEntered / perPack).toFixed(3)} / ${baseUnit}`;
+            }
+            px.textContent = txt;
+            px.style.color = 'var(--primary)';
+        } else {
+            px.textContent = '';
+        }
+
+        // expiry hint
+        const exVal = document.getElementById('lex' + id).value;
+        const exh = document.getElementById('lexh' + id);
+        if (exVal) {
+            const days = Math.round((new Date(exVal) - new Date(new Date().toDateString())) / 86400000);
+            if (days < 0)      { exh.textContent = `⛔ منتهي من ${-days} يوم`; exh.style.color = '#EF4444'; }
+            else if (days <= 14){ exh.textContent = `⚠️ باقي ${days} يوم`;      exh.style.color = '#F59E0B'; }
+            else                { exh.textContent = `باقي ${days} يوم`;         exh.style.color = '#16A34A'; }
+        } else { exh.textContent = 'بدون تاريخ'; exh.style.color = 'var(--text-muted)'; }
+
+        const hint = document.getElementById('lc' + id);
+        if (isPack) {
+            hint.textContent = (qty > 0 && perPack > 0)
+                ? `${fmt(qty)} ${packName} = ${fmt(qty * perPack)} ${baseUnit}`
+                : 'حدد العبوة بتشيل كام وحدة';
+            hint.style.color = (qty > 0 && perPack > 0) ? 'var(--text-muted)' : 'var(--danger)';
+        } else {
+            hint.textContent = qty > 0 ? `${fmt(qty)} ${baseUnit}` : '';
+            hint.style.color = 'var(--text-muted)';
+        }
+    });
+    document.getElementById('rcTotal').textContent = total.toFixed(2);
+    if (document.getElementById('rcPaidStatus').value === 'paid')
+        document.getElementById('rcAmountPaid').value = total.toFixed(2);
+}
+
+function onPaidStatusChange() {
+    const v = document.getElementById('rcPaidStatus').value;
+    document.getElementById('rcPartialRow').style.display = v === 'partial' ? 'block' : 'none';
+    if (v === 'unpaid') document.getElementById('rcAmountPaid').value = 0;
+    recalc();
+}
+
+async function saveReceipt() {
+    const lines = [];
+    let bad = null;
+    document.querySelectorAll('#rcLines tr').forEach(tr => {
+        const id = tr.id.replace('line', '');
+        const qty = parseFloat(document.getElementById('lq' + id).value) || 0;
+        if (qty <= 0) return;
+        const isPack = document.getElementById('lu' + id).value === 'pack';
+        const perPack = parseFloat(document.getElementById('lpp' + id).value) || 0;
+        const packName = (document.getElementById('lpn' + id).value || '').trim();
+
+        if (isPack && perPack <= 0) {
+            bad = 'من فضلك حدد العبوة بتشيل كام وحدة';
+            return;
+        }
+
+        lines.push({
+            productId: parseInt(document.getElementById('lp' + id).value),
+            quantity: qty,
+            asPackage: isPack,
+            unitCost: linePricePerEntered(id),
+            unit: lineBaseUnit(id),
+            packagingName: isPack ? (packName || 'عبوة') : null,
+            unitsPerPackage: isPack ? perPack : null,
+            expiryDate: document.getElementById('lex' + id).value || null,
+            shelfLifeDays: parseInt(document.getElementById('lsl' + id).value) || null,
+            servingName: document.getElementById('lsn' + id).value.trim() || null,
+            servingsPerUnit: parseFloat(document.getElementById('lsp' + id).value) || null
+        });
+    });
+    if (bad) { Toast.error(bad); return; }
+    if (!lines.length) { Toast.error('أضف صنفًا واحدًا على الأقل بكمية صحيحة'); return; }
+
+    const status = document.getElementById('rcPaidStatus').value;
+    const d = document.getElementById('rcDate').value;
+    Loading.show();
+    try {
+        const r = await API.post('/Inventory/CreateReceipt', {
+            date: d ? new Date(d).toISOString() : null,
+            supplierId: parseInt(document.getElementById('rcSupplierId').value) || null,
+            invoiceNumber: document.getElementById('rcInvoice').value || null,
+            notes: document.getElementById('rcNotes').value || null,
+            isPaid: status === 'paid',
+            amountPaid: status === 'partial' ? (parseFloat(document.getElementById('rcAmountPaid').value) || 0) : 0,
+            lines
+        });
+        if (r.success) { Toast.success('تم حفظ الإيصال ' + r.receiptNumber); setTimeout(() => location.reload(), 800); }
+        else Toast.error(r.message || 'حدث خطأ');
+    } finally { Loading.hide(); }
+}
+
+let settleId = 0;
+function openSettle(id, outstanding) {
+    settleId = id;
+    document.getElementById('stOutstanding').textContent = Number(outstanding).toFixed(2);
+    document.getElementById('stAmount').value = Number(outstanding).toFixed(2);
+    Modal.open('settleModal');
+}
+
+async function saveSettle() {
+    const amount = parseFloat(document.getElementById('stAmount').value);
+    if (!amount || amount <= 0) { Toast.error('أدخل مبلغًا صحيحًا'); return; }
+    Loading.show();
+    try {
+        const r = await API.post('/Inventory/SettleReceipt', { receiptId: settleId, amount });
+        if (r.success) { Toast.success('تم تسجيل السداد'); setTimeout(() => location.reload(), 700); }
+        else Toast.error(r.message || 'حدث خطأ');
+    } finally { Loading.hide(); }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    // The new-receipt modal only renders for admins.
+    if (!document.getElementById('rcLines')) return;
+    if (new URLSearchParams(location.search).get('new') === '1') openNewReceipt();
+});
+</script>
+}

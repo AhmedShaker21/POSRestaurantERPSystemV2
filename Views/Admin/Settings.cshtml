@@ -1,0 +1,467 @@
+@model Dictionary<string, string>
+@{
+    ViewData["Title"] = "الإعدادات";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var branches = ViewBag.Branches as List<RestaurantERP.Models.Branch> ?? new();
+    string Get(string key, string def = "") => Model.GetValueOrDefault(key, def);
+}
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">الإعدادات</h1>
+        <p class="page-subtitle">إعدادات النظام والفروع</p>
+    </div>
+    <button class="btn btn-primary" onclick="saveAllSettings()">
+        <i class="fas fa-save me-2"></i><span data-t="saveSettings">Save Settings</span>
+    </button>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+
+    <!-- Organization Info -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-building me-2" style="color:var(--primary)"></i><span data-t="orgInfo">Organization Info</span></h3>
+        </div>
+        <div class="card-body" style="padding:24px">
+            <div class="form-group">
+                <label class="form-label">Organization Name (Arabic)</label>
+                <input type="text" id="OrgName" class="form-control" value="@Get("OrgName")" dir="rtl">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Organization Name (English)</label>
+                <input type="text" id="OrgNameEn" class="form-control" value="@Get("OrgNameEn")">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Phone Number</label>
+                <input type="text" id="Phone" class="form-control" value="@Get("Phone")">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Address</label>
+                <textarea id="Address" class="form-control" rows="2">@Get("Address")</textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Website</label>
+                <input type="text" id="Website" class="form-control" value="@Get("Website")">
+            </div>
+        </div>
+    </div>
+
+    <!-- Financial Settings -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-coins me-2" style="color:var(--primary)"></i><span data-t="financialSettings">Financial Settings</span></h3>
+        </div>
+        <div class="card-body" style="padding:24px">
+            <div class="form-group">
+                <label class="form-label">Tax Rate (%)</label>
+                <input type="number" id="TaxRate" class="form-control" value="@Get("TaxRate", "14")" min="0" max="100" step="0.5">
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                <div class="form-group">
+                    <label class="form-label">Currency (EN)</label>
+                    <input type="text" id="Currency" class="form-control" value="@Get("Currency", "EGP")">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Currency (AR)</label>
+                    <input type="text" id="CurrencyAr" class="form-control" value="@Get("CurrencyAr", "ج.م")" dir="rtl">
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Default Discount (%)</label>
+                <input type="number" id="DefaultDiscount" class="form-control" value="@Get("DefaultDiscount", "0")" min="0" max="100">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Receipt Footer Note (EN)</label>
+                <input type="text" id="ReceiptFooter" class="form-control" value="@Get("ReceiptFooter", "Thank you for your visit!")">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Receipt Footer Note (AR)</label>
+                <input type="text" id="ReceiptFooterAr" class="form-control" value="@Get("ReceiptFooterAr", "شكراً لزيارتكم")" dir="rtl">
+            </div>
+        </div>
+    </div>
+
+    <!-- POS Settings -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-cash-register me-2" style="color:var(--primary)"></i><span data-t="posSettings">POS Settings</span></h3>
+        </div>
+        <div class="card-body" style="padding:24px">
+            <div class="form-group">
+                <label class="form-label">Default Order Type</label>
+                <select id="DefaultOrderType" class="form-control">
+                    <option value="DineIn" selected="@(Get("DefaultOrderType") == "DineIn" ? "selected" : "")">Dine In</option>
+                    <option value="Takeaway" selected="@(Get("DefaultOrderType") == "Takeaway" ? "selected" : "")">Takeaway</option>
+                    <option value="Delivery" selected="@(Get("DefaultOrderType") == "Delivery" ? "selected" : "")">Delivery</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Default Payment Method</label>
+                <select id="DefaultPayment" class="form-control">
+                    <option value="Cash" selected=" @(Get("DefaultPayment") == "Cash" ? "selected" : "")">Cash</option>
+                    <option value="Card" selected=" @(Get("DefaultPayment") == "Card" ? "selected" : "")">Card</option>
+                    <option value="Digital" selected="@(Get("DefaultPayment") == "Digital" ? "selected" : "")">Digital Wallet</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label d-flex align-items-center gap-3">
+                    <input type="checkbox" id="AutoPrint" @(Get("AutoPrint") == "true" ? "checked" : "") style="width:18px;height:18px">
+                    Auto Print Invoice After Order
+                </label>
+            </div>
+            <div class="form-group">
+                <label class="form-label d-flex align-items-center gap-3">
+                    <input type="checkbox" id="RequireTable" @(Get("RequireTable") == "true" ? "checked" : "") style="width:18px;height:18px">
+                    Require Table Selection for Dine-In
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- System Settings -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-cog me-2" style="color:var(--primary)"></i><span data-t="systemSettings">System Settings</span></h3>
+        </div>
+        <div class="card-body" style="padding:24px">
+            <div class="form-group">
+                <label class="form-label">Low Stock Alert Threshold</label>
+                <input type="number" id="LowStockThreshold" class="form-control" value="@Get("LowStockThreshold", "10")" min="1">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Shift Duration (hours)</label>
+                <input type="number" id="ShiftDuration" class="form-control" value="@Get("ShiftDuration", "8")" min="1" max="24">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Kitchen Display Refresh (seconds)</label>
+                <input type="number" id="KitchenRefresh" class="form-control" value="@Get("KitchenRefresh", "30")" min="5">
+            </div>
+            <div class="form-group">
+                <label class="form-label d-flex align-items-center gap-3">
+                    <input type="checkbox" id="EnableInventory" @(Get("EnableInventory", "true") == "true" ? "checked" : "") style="width:18px;height:18px">
+                    Enable Inventory Tracking
+                </label>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Preview Card -->
+<div class="card" style="margin-top:24px">
+    <div class="card-header">
+        <h3 class="card-title"><i class="fas fa-print me-2" style="color:var(--primary)"></i><span data-t="receiptPreview">Receipt Preview</span></h3>
+        <button class="btn btn-outline btn-sm" onclick="previewReceipt()"><i class="fas fa-eye me-2"></i>Preview</button>
+    </div>
+    <div class="card-body" style="padding:24px;display:flex;justify-content:center">
+        <div id="receiptPreview" style="font-family:'Cairo',sans-serif;max-width:280px;width:100%;padding:20px;border:1px dashed var(--border-color);border-radius:8px;text-align:center;font-size:13px">
+            <h3 style="margin:0;font-size:16px">@Get("OrgName", "نادي دار الطائرات")</h3>
+            <p style="margin:4px 0;font-size:12px;color:var(--text-muted)">@Get("OrgNameEn", "Aircraft Factory Club")</p>
+            <p style="margin:0;font-size:11px;color:var(--text-muted)">@Get("Phone", "")</p>
+            <div style="border-top:1px dashed var(--border-color);margin:12px 0;padding-top:12px;text-align:left">
+                <div style="display:flex;justify-content:space-between"><span>Item 1 x2</span><span>100.00 @Get("Currency", "EGP")</span></div>
+                <div style="display:flex;justify-content:space-between"><span>Item 2 x1</span><span>50.00 @Get("Currency", "EGP")</span></div>
+            </div>
+            <div style="border-top:1px dashed var(--border-color);padding-top:12px;text-align:left">
+                <div style="display:flex;justify-content:space-between"><span>Subtotal:</span><span>150.00</span></div>
+                <div style="display:flex;justify-content:space-between"><span>Tax (@Get("TaxRate", "14")%):</span><span>21.00</span></div>
+                <div style="display:flex;justify-content:space-between;font-weight:700;font-size:15px;margin-top:4px"><span>Total:</span><span>171.00 @Get("Currency", "EGP")</span></div>
+            </div>
+            <div style="border-top:1px dashed var(--border-color);margin-top:12px;padding-top:10px;font-size:11px;color:var(--text-muted)">
+                <p style="margin:0">@Get("ReceiptFooterAr", "شكراً لزيارتكم")</p>
+                <p style="margin:2px 0">@Get("ReceiptFooter", "Thank you for your visit!")</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══ إدارة الفروع ═══════════════════════════════════════════════ -->
+<div class="card" style="margin-top:24px">
+    <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+        <h3 class="card-title"><i class="fas fa-code-branch me-2" style="color:var(--primary)"></i>إدارة الفروع</h3>
+        <button class="btn btn-primary btn-sm" onclick="openAddBranch()">
+            <i class="fas fa-plus me-1"></i> إضافة فرع جديد
+        </button>
+    </div>
+    <div class="card-body" style="padding:0">
+        <div style="overflow-x:auto">
+            <table class="data-table" id="branchesTable">
+                <thead>
+                    <tr>
+                        <th style="width:40px">اللون</th>
+                        <th>اسم الفرع (عربي)</th>
+                        <th>اسم الفرع (إنجليزي)</th>
+                        <th>الهاتف</th>
+                        <th>العنوان</th>
+                        <th>رئيسي</th>
+                        <th>الحالة</th>
+                        <th>الإجراءات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var b in branches)
+                    {
+                        <tr id="branch-row-@b.Id">
+                            <td>
+                                <div style="display:flex;align-items:center;gap:8px">
+                                    <div style="width:28px;height:28px;border-radius:50%;background:@b.ColorHex;flex-shrink:0;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.2)"></div>
+                                    <span style="font-size:18px">@b.Icon</span>
+                                </div>
+                            </td>
+                            <td><strong>@b.NameAr</strong></td>
+                            <td style="color:var(--text-muted);font-size:13px">@b.Name</td>
+                            <td style="font-size:13px">@(b.Phone ?? "—")</td>
+                            <td style="font-size:12px;color:var(--text-muted);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">@(b.Address ?? "—")</td>
+                            <td>
+                                @if (b.IsMainBranch)
+                                {
+                                    <span class="badge badge-success">★ رئيسي</span>
+                                }
+                                else
+                                {
+                                    <span style="color:var(--text-muted);font-size:12px">—</span>
+                                }
+                            </td>
+                            <td>
+                                <span class="badge @(b.IsActive ? "badge-success" : "badge-danger")">
+                                    @(b.IsActive ? "نشط" : "معطل")
+                                </span>
+                            </td>
+                            <td>
+                                <div style="display:flex;gap:6px">
+                                    <button class="btn btn-outline btn-sm" onclick="editBranch(@b.Id,'@b.NameAr.Replace("'", "\'")', '@b.Name.Replace("'", "\'")', '@(b.Phone ?? "")', '@(b.Address ?? "")', '@b.ColorHex', '@b.Icon', @(b.IsMainBranch ? "true" : "false"))" title="تعديل">
+                                        ✏️
+                                    </button>
+                                    <button class="btn btn-outline btn-sm" onclick="toggleBranch(@b.Id)" title="@(b.IsActive ? "تعطيل" : "تفعيل")"
+                                            style="color:@(b.IsActive ? "#ef4444" : "#22c55e")">
+                                        @(b.IsActive ? "🔴" : "🟢")
+                                    </button>
+                                    @if (!b.IsMainBranch)
+                                    {
+                                        <button class="btn btn-danger btn-sm" onclick="deleteBranch(@b.Id,'@b.NameAr.Replace("'", "\'")')" title="حذف">
+                                            🗑️
+                                        </button>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div style="padding:14px 20px;background:var(--bg-secondary);border-top:1px solid var(--border-color);font-size:12px;color:var(--text-muted)">
+            <i class="fas fa-info-circle me-1" style="color:var(--primary)"></i>
+            إضافة أو تعديل فرع ينعكس فوراً على جميع أجزاء النظام (الكاشير، المنتجات، التقارير، المصروفات).
+        </div>
+    </div>
+</div>
+
+<!-- مودال إضافة/تعديل فرع -->
+<div class="modal-overlay" id="branchModal">
+    <div class="modal" style="max-width:520px">
+        <div class="modal-header">
+            <h3 class="modal-title" id="branchModalTitle"><i class="fas fa-code-branch me-2" style="color:var(--primary)"></i>إضافة فرع</h3>
+            <button class="modal-close" onclick="Modal.close('branchModal')">&times;</button>
+        </div>
+        <div class="modal-body" style="padding:24px">
+            <input type="hidden" id="branchId">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+                <div class="form-group">
+                    <label class="form-label">اسم الفرع (عربي) <span style="color:var(--danger)">*</span></label>
+                    <input type="text" id="branchNameAr" class="form-control" dir="rtl" placeholder="مثال: الفرع الرئيسي">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">اسم الفرع (إنجليزي)</label>
+                    <input type="text" id="branchName" class="form-control" placeholder="Main Branch">
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+                <div class="form-group">
+                    <label class="form-label">الهاتف</label>
+                    <input type="text" id="branchPhone" class="form-control" placeholder="01xxxxxxxxx">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">العنوان</label>
+                    <input type="text" id="branchAddress" class="form-control" dir="rtl" placeholder="عنوان الفرع">
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+                <div class="form-group">
+                    <label class="form-label">لون الفرع</label>
+                    <div style="display:flex;gap:8px;align-items:center">
+                        <input type="color" id="branchColor" class="form-control" value="#2563a8" style="width:50px;height:40px;padding:2px;cursor:pointer">
+                        <div style="display:flex;gap:6px;flex-wrap:wrap">
+                            @foreach (var c in new[] { "#2563a8", "#ef4444", "#22c55e", "#f59e0b", "#8b5cf6", "#0891b2", "#ec4899", "#6b7280" })
+                            {
+                                <div onclick="document.getElementById('branchColor').value='@c'"
+                                     style="width:24px;height:24px;border-radius:50%;background:@c;cursor:pointer;border:2px solid transparent"
+                                     onmouseenter="this.style.transform='scale(1.2)'" onmouseleave="this.style.transform=''"></div>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">أيقونة الفرع</label>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                        <input type="text" id="branchIcon" class="form-control" value="🏢" style="width:60px;text-align:center;font-size:20px">
+                        @foreach (var ic in new[] { "🏢", "🏪", "🏬", "🏨", "🏦", "🏭", "🍽️", "☕", "🌟" })
+                        {
+                            <span onclick="document.getElementById('branchIcon').value='@ic'"
+                                  style="font-size:22px;cursor:pointer;padding:2px" title="@ic">@ic</span>
+                        }
+                    </div>
+                </div>
+            </div>
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:12px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg-secondary)">
+                <input type="checkbox" id="branchIsMain" style="width:18px;height:18px">
+                <div>
+                    <div style="font-weight:700;font-size:13px">تعيين كفرع رئيسي</div>
+                    <div style="font-size:11px;color:var(--text-muted)">سيُلغى تعيين الفرع الرئيسي الحالي</div>
+                </div>
+            </label>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="Modal.close('branchModal')">إلغاء</button>
+            <button class="btn btn-primary" id="saveBranchBtn" onclick="saveBranch()">
+                <i class="fas fa-save me-2"></i>حفظ الفرع
+            </button>
+        </div>
+    </div>
+</div>
+
+
+@section Scripts {
+    <script>
+        /* ═══ BRANCH MANAGEMENT ═══════════════════════════════════ */
+        function openAddBranch() {
+            document.getElementById('branchId').value       = '';
+            document.getElementById('branchNameAr').value   = '';
+            document.getElementById('branchName').value     = '';
+            document.getElementById('branchPhone').value    = '';
+            document.getElementById('branchAddress').value  = '';
+            document.getElementById('branchColor').value    = '#2563a8';
+            document.getElementById('branchIcon').value     = '🏢';
+            document.getElementById('branchIsMain').checked = false;
+            document.getElementById('branchModalTitle').innerHTML = '<i class="fas fa-code-branch me-2" style="color:var(--primary)"></i>إضافة فرع جديد';
+            Modal.open('branchModal');
+        }
+
+        function editBranch(id, nameAr, name, phone, address, color, icon, isMain) {
+            document.getElementById('branchId').value       = id;
+            document.getElementById('branchNameAr').value   = nameAr;
+            document.getElementById('branchName').value     = name;
+            document.getElementById('branchPhone').value    = phone;
+            document.getElementById('branchAddress').value  = address;
+            document.getElementById('branchColor').value    = color;
+            document.getElementById('branchIcon').value     = icon;
+            document.getElementById('branchIsMain').checked = isMain === true || isMain === 'true';
+            document.getElementById('branchModalTitle').innerHTML = '<i class="fas fa-code-branch me-2" style="color:var(--primary)"></i>تعديل الفرع';
+            Modal.open('branchModal');
+        }
+
+        async function saveBranch() {
+            const nameAr = document.getElementById('branchNameAr').value.trim();
+            if (!nameAr) { Toast.error('يرجى إدخال اسم الفرع'); return; }
+
+            const btn = document.getElementById('saveBranchBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>جاري الحفظ...';
+
+            const id = parseInt(document.getElementById('branchId').value) || 0;
+            const payload = {
+                id,
+                name:        document.getElementById('branchName').value    || nameAr,
+                nameAr,
+                phone:       document.getElementById('branchPhone').value   || null,
+                address:     document.getElementById('branchAddress').value || null,
+                colorHex:    document.getElementById('branchColor').value,
+                icon:        document.getElementById('branchIcon').value,
+                isMainBranch:document.getElementById('branchIsMain').checked,
+                isActive:    true
+            };
+
+            const url = id > 0 ? '/Branch/Edit' : '/Branch/Create';
+            try {
+                const res = await API.post(url, payload);
+                if (res.success || res.id) {
+                    Toast.success(id > 0 ? 'تم تحديث الفرع ✅' : 'تم إضافة الفرع ✅');
+                    setTimeout(() => location.reload(), 700);
+                } else {
+                    Toast.error(res.message || 'فشل الحفظ');
+                }
+            } catch(e) { Toast.error('حدث خطأ'); }
+
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-save me-2"></i>حفظ الفرع';
+        }
+
+        async function toggleBranch(id) {
+            const res = await API.post('/Branch/Toggle', { id });
+            if (res.success) {
+                Toast.success('تم تغيير حالة الفرع');
+                setTimeout(() => location.reload(), 600);
+            } else Toast.error(res.message || 'فشل');
+        }
+
+        async function deleteBranch(id, name) {
+            if (!confirm(`⚠️ هل أنت متأكد من حذف الفرع "${name}"؟\n\nسيتم نقل المصروفات والورديات إلى الفرع الرئيسي.\nلا يمكن التراجع عن هذا الإجراء.`)) return;
+            const res = await API.post('/Branch/Delete', { id });
+            if (res.success) {
+                Toast.success('تم حذف الفرع ✅');
+                setTimeout(() => location.reload(), 700);
+            } else {
+                Toast.error(res.message || 'فشل الحذف');
+            }
+        }
+
+        /* ═══ SETTINGS ══════════════════════════════════════════════ */
+        async function saveAllSettings() {
+            const settings = {};
+            ['OrgName','OrgNameEn','Phone','Address','Website','TaxRate','Currency','CurrencyAr',
+             'DefaultDiscount','ReceiptFooter','ReceiptFooterAr','DefaultOrderType','DefaultPayment',
+             'LowStockThreshold','ShiftDuration','KitchenRefresh'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) settings[id] = el.value;
+            });
+            ['AutoPrint','RequireTable','EnableInventory'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) settings[id] = el.checked ? 'true' : 'false';
+            });
+            try {
+                const res = await API.post('/Admin/SaveSettings', settings);
+                if (res.success) Toast.success('Settings saved successfully!');
+                else Toast.error(res.message || 'Failed to save settings');
+            } catch(e) { Toast.error('Error saving settings'); }
+        }
+
+        function previewReceipt() {
+            const orgName = document.getElementById('OrgName').value;
+            const orgNameEn = document.getElementById('OrgNameEn').value;
+            const phone = document.getElementById('Phone').value;
+            const taxRate = document.getElementById('TaxRate').value;
+            const currency = document.getElementById('Currency').value;
+            const footer = document.getElementById('ReceiptFooter').value;
+            const footerAr = document.getElementById('ReceiptFooterAr').value;
+            const html = `
+                <div style="font-family:'Cairo',sans-serif;max-width:300px;margin:0 auto;padding:20px;text-align:center">
+                    <h2 style="margin:0;font-size:18px">${orgName}</h2>
+                    <p style="margin:4px 0;font-size:12px">${orgNameEn}</p>
+                    <p style="margin:0;font-size:11px">${phone}</p>
+                    <div style="border-top:1px dashed #333;margin:12px 0;padding-top:12px;text-align:left;font-size:12px">
+                        <div style="display:flex;justify-content:space-between"><span>Sample Item x2</span><span>100.00</span></div>
+                        <div style="display:flex;justify-content:space-between"><span>Sample Item x1</span><span>50.00</span></div>
+                    </div>
+                    <div style="border-top:1px dashed #333;padding-top:12px;text-align:left;font-size:12px">
+                        <div style="display:flex;justify-content:space-between"><span>Subtotal:</span><span>150.00</span></div>
+                        <div style="display:flex;justify-content:space-between"><span>Tax (${taxRate}%):</span><span>21.00</span></div>
+                        <div style="display:flex;justify-content:space-between;font-weight:700;font-size:14px;margin-top:4px"><span>Total:</span><span>171.00 ${currency}</span></div>
+                    </div>
+                    <div style="border-top:1px dashed #333;margin-top:12px;padding-top:10px;font-size:11px">
+                        <p style="margin:0">${footerAr}</p>
+                        <p style="margin:2px 0">${footer}</p>
+                    </div>
+                </div>`;
+            printInvoice(html);
+        }
+    </script>
+}

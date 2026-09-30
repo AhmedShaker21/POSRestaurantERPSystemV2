@@ -1,0 +1,530 @@
+@model RestaurantERP.Services.DashboardStats
+@{
+    ViewBag.PageTitle = "لوحة التحكم";
+    var isAr = (Context.Request.Cookies["erp-lang"] ?? "ar") != "en";
+    var branches = ViewBag.Branches as List<RestaurantERP.Models.Branch> ?? new();
+    var selectedBranchId = ViewBag.SelectedBranchId as int?;
+    var selectedBranch = ViewBag.SelectedBranch as RestaurantERP.Models.Branch;
+    string Fmt(decimal v) => v.ToString("N0");
+    string PC(decimal v) => v >= 0 ? "#22c55e" : "#ef4444";
+    string PI(decimal v) => v >= 0 ? "fa-arrow-trend-up" : "fa-arrow-trend-down";
+}
+
+@* ── BRANCH SELECTOR ─────────────────────────────────────── *@
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap;padding:14px 18px;background:var(--card-bg);border:1px solid var(--border-color);border-radius:14px;box-shadow:var(--shadow)">
+    <div style="font-size:12px;font-weight:700;color:var(--text-muted);white-space:nowrap">
+        <i class="fas fa-code-branch me-1" style="color:var(--primary)"></i>
+        @(isAr ? "عرض بيانات" : "View data for:")
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;flex:1">
+        <a href="/Admin/Index"
+               style="padding:6px 16px;border-radius:20px;font-size:12px;font-weight:700;text-decoration:none;border:2px solid @(selectedBranchId == null ? "var(--primary)" : "var(--border-color)");background:@(selectedBranchId == null ? "var(--primary)" : "transparent");color:@(selectedBranchId == null ? "#fff" : "var(--text-muted)");transition:all .2s">
+            🌐 @(isAr ? "جميع الفروع" : "All Branches")
+        </a>
+        @foreach (var b in branches)
+        {
+            var isSel = selectedBranchId == b.Id;
+            var branchBg = isSel ? b.ColorHex : "transparent";
+            var branchFg = isSel ? "#fff" : "var(--text-muted)";
+            var branchBd = isSel ? b.ColorHex : "var(--border-color)";
+            <a href="/Admin/Index?branchId=@b.Id"
+                   style="padding:6px 16px;border-radius:20px;font-size:12px;font-weight:700;text-decoration:none;border:2px solid @branchBd;background:@branchBg;color:@branchFg;transition:all .2s;display:flex;align-items:center;gap:5px">
+                @b.Icon @(isAr ? b.NameAr : b.Name)
+                @if (b.IsMainBranch)
+                {
+                    <span style="font-size:9px;opacity:.7">MAIN</span>
+                }
+            </a>
+        }
+    </div>
+    @if (selectedBranch != null)
+    {
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 12px;background:@(selectedBranch.ColorHex)15;border:1.5px solid @(selectedBranch.ColorHex)44;border-radius:20px;font-size:11px;font-weight:700;color:@selectedBranch.ColorHex;white-space:nowrap">
+            <i class="fas fa-map-marker-alt"></i>
+            @(isAr ? selectedBranch.NameAr : selectedBranch.Name)
+            @if (!string.IsNullOrEmpty(selectedBranch.Phone))
+            {
+                <span style="font-weight:400;opacity:.7">· @selectedBranch.Phone</span>
+            }
+        </div>
+    }
+    else
+    {
+        <div style="font-size:11px;color:var(--text-muted);white-space:nowrap;font-style:italic">
+            @(isAr ? "مجموع بيانات كل الفروع" : "Aggregated across all branches")
+        </div>
+    }
+</div>
+
+@* ── KPI CARDS ─────────────────────────────────────────────── *@
+<div class="grid grid-4 mb-4">
+    <div class="stat-card" style="--stat-color:#2563a8">
+        <div class="stat-icon"><i class="fas fa-coins"></i></div>
+        <div class="stat-info">
+            <div class="stat-value">@Fmt(Model.TodaySales)</div>
+            <div class="stat-label">@(isAr ? "مبيعات اليوم" : "Today Sales") <span style="font-size:11px">ج.م</span></div>
+            <span class="stat-trend up">@(isAr ? "صافي المبيعات" : "Net Revenue")</span>
+        </div>
+    </div>
+    <div class="stat-card" style="--stat-color:@PC(Model.TodayNetProfit)">
+        <div class="stat-icon" style="background:@(PC(Model.TodayNetProfit))22;color:@PC(Model.TodayNetProfit)">
+            <i class="fas @PI(Model.TodayNetProfit)"></i>
+        </div>
+        <div class="stat-info">
+            <div class="stat-value" style="color:@PC(Model.TodayNetProfit)">@Fmt(Model.TodayNetProfit)</div>
+            <div class="stat-label">@(isAr ? "صافي ربح اليوم" : "Today Net Profit") <span style="font-size:11px">ج.م</span></div>
+            <span class="stat-trend @(Model.TodayProfitMargin >= 0 ? "up" : "down")">
+                @(isAr ? "هامش" : "Margin") @Model.TodayProfitMargin%
+            </span>
+        </div>
+    </div>
+    <div class="stat-card" style="--stat-color:@PC(Model.MonthNetProfit)">
+        <div class="stat-icon" style="background:@(PC(Model.MonthNetProfit))22;color:@PC(Model.MonthNetProfit)">
+            <i class="fas fa-chart-line"></i>
+        </div>
+        <div class="stat-info">
+            <div class="stat-value" style="color:@PC(Model.MonthNetProfit)">@Fmt(Model.MonthNetProfit)</div>
+            <div class="stat-label">@(isAr ? "ربح الشهر الصافي" : "Month Net Profit") <span style="font-size:11px">ج.م</span></div>
+            <span class="stat-trend @(Model.ProfitGrowth >= 0 ? "up" : "down")">
+                @(Model.ProfitGrowth >= 0 ? "+" : "")@Model.ProfitGrowth% @(isAr ? "نمو" : "growth")
+            </span>
+        </div>
+    </div>
+    <div class="stat-card" style="--stat-color:#ef4444">
+        <div class="stat-icon"><i class="fas fa-clock"></i></div>
+        <div class="stat-info">
+            <div class="stat-value">@Model.PendingOrders</div>
+            <div class="stat-label">@(isAr ? "طلبات معلقة" : "Pending Orders")</div>
+            @if (Model.LowStockCount > 0)
+            {
+                <span class="stat-trend down">⚠️ @Model.LowStockCount @(isAr ? "مخزون منخفض" : "low stock")</span>
+            }
+        </div>
+    </div>
+</div>
+
+@* ── PROFIT BREAKDOWN ROW ──────────────────────────────────── *@
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px">
+    <div class="card" style="padding:16px;border-top:3px solid #f59e0b">
+        <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px">
+            <i class="fas fa-box me-1" style="color:#f59e0b"></i>@(isAr ? "تكلفة البضاعة اليوم" : "Today COGS")
+        </div>
+        <div style="font-size:20px;font-weight:800;color:#f59e0b">@Fmt(Model.TodayCogs) <span style="font-size:11px">ج.م</span></div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">@(isAr ? "تكلفة المنتجات المباعة" : "Cost of goods sold")</div>
+    </div>
+    <div class="card" style="padding:16px;border-top:3px solid #8b5cf6">
+        <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px">
+            <i class="fas fa-receipt me-1" style="color:#8b5cf6"></i>@(isAr ? "مصروفات اليوم" : "Today Expenses")
+        </div>
+        <div style="font-size:20px;font-weight:800;color:#8b5cf6">@Fmt(Model.TodayExpenses) <span style="font-size:11px">ج.م</span></div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">@(isAr ? "المصروفات التشغيلية" : "Operating expenses")</div>
+    </div>
+    <div class="card" style="padding:16px;border-top:3px solid #ef4444;cursor:pointer" onclick="window.location.href='/Refund/AdminRefunds'">
+        <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px">
+            <i class="fas fa-undo-alt me-1" style="color:#ef4444"></i>@(isAr ? "مرتجعات اليوم" : "Today Refunds")
+        </div>
+        <div style="font-size:20px;font-weight:800;color:#ef4444">@Fmt(Model.TodayRefundAmount) <span style="font-size:11px">ج.م</span></div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">@Model.TodayRefundCount @(isAr ? "مرتجع" : "refund(s)")</div>
+    </div>
+    <div class="card" style="padding:16px;border-top:3px solid @PC(Model.TodayGrossProfit)">
+        <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px">
+            <i class="fas fa-sack-dollar me-1" style="color:@PC(Model.TodayGrossProfit)"></i>@(isAr ? "ربح اليوم الإجمالي" : "Today Gross Profit")
+        </div>
+        <div style="font-size:20px;font-weight:800;color:@PC(Model.TodayGrossProfit)">@Fmt(Model.TodayGrossProfit) <span style="font-size:11px">ج.م</span></div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">@(isAr ? "قبل المصروفات" : "Before expenses")</div>
+    </div>
+</div>
+
+@* ── WEEKLY BREAKDOWN ──────────────────────────────────────── *@
+<div class="card" style="margin-bottom:20px">
+    <div class="card-header">
+        <h3 class="card-title">
+            <i class="fas fa-calendar-week me-2" style="color:var(--primary)"></i>
+            @(isAr ? "تفصيل الأسبوع الحالي" : "This Week Breakdown")
+        </h3>
+        <div style="display:flex;gap:20px;font-size:13px">
+            <span style="color:var(--text-muted)">
+                @(isAr ? "إيراد الأسبوع" : "Week Revenue"):
+                <strong style="color:var(--primary)">@Fmt(Model.WeekRevenue) ج.م</strong>
+            </span>
+            <span style="color:var(--text-muted)">
+                @(isAr ? "صافي الربح" : "Net Profit"):
+                <strong style="color:@PC(Model.WeekNetProfit)">@Fmt(Model.WeekNetProfit) ج.م</strong>
+            </span>
+            <span style="color:var(--text-muted)">
+                @(isAr ? "هامش" : "Margin"):
+                <strong style="color:@PC(Model.WeekProfitMargin)">@Model.WeekProfitMargin%</strong>
+            </span>
+        </div>
+    </div>
+    <div class="card-body" style="padding:20px">
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px">
+            @{
+                var maxDayRev = Model.WeeklyBreakdown.Max(d => d.Revenue);
+            }
+            @foreach (var day in Model.WeeklyBreakdown)
+            {
+                var barH = maxDayRev > 0 ? (int)((day.Revenue / maxDayRev) * 80) : 0;
+                var isPos = day.NetProfit >= 0;
+                <div style="text-align:center;padding:10px 6px;border-radius:12px;background:@(day.IsToday ? "var(--primary-light)" : "var(--bg-secondary)");border:2px solid @(day.IsToday ? "var(--primary)" : "transparent")">
+                    <div style="font-size:11px;font-weight:700;color:@(day.IsToday ? "var(--primary)" : "var(--text-muted)");margin-bottom:6px">
+                        @(isAr ? day.DayNameAr : day.DayName)
+                    </div>
+                    <div style="height:80px;display:flex;align-items:flex-end;justify-content:center;margin-bottom:6px">
+                        <div style="width:28px;height:@(Math.Max(4, barH))px;background:@(day.IsToday ? "var(--primary)" : (isPos ? "#22c55e99" : "#ef444499"));border-radius:4px 4px 0 0;transition:height .4s"></div>
+                    </div>
+                    <div style="font-size:11px;font-weight:700;color:var(--text-primary)">@Fmt(day.Revenue)</div>
+                    <div style="font-size:10px;font-weight:700;color:@PC(day.NetProfit);margin-top:2px">
+                        @(isPos ? "+" : "")@Fmt(day.NetProfit)
+                    </div>
+                    <div style="font-size:10px;color:var(--text-muted);margin-top:1px">
+                        @day.Orders @(isAr ? "طلب" : "ord")
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@* ── CHARTS ROW ────────────────────────────────────────────── *@
+<div class="grid grid-2 mb-4">
+
+    @* Net Profit Line Chart *@
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-chart-area me-2" style="color:#22c55e"></i>
+                @(isAr ? "الربح - آخر 30 يوم" : "Profit — Last 30 Days")
+            </h3>
+            <div style="display:flex;gap:6px">
+                <button class="btn btn-sm btn-primary" id="btnNetProfit" onclick="switchProfitChart('net')">   @(isAr ? "صافي" : "Net")</button>
+                <button class="btn btn-sm btn-outline" id="btnGrossProfit" onclick="switchProfitChart('gross')"> @(isAr ? "إجمالي" : "Gross")</button>
+                <button class="btn btn-sm btn-outline" id="btnRevChart" onclick="switchProfitChart('revenue')">@(isAr ? "إيراد" : "Revenue")</button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="chart-container" style="height:240px"><canvas id="profitChart"></canvas></div>
+        </div>
+    </div>
+
+    @* Sales Line Chart *@
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-chart-line me-2" style="color:#2563a8"></i>
+                @(isAr ? "المبيعات - آخر 30 يوم" : "Sales — Last 30 Days")
+            </h3>
+            <div style="display:flex;gap:6px">
+                <button class="btn btn-sm btn-primary" id="btnRevenue" onclick="switchSalesChart('revenue')">@(isAr ? "إيراد" : "Revenue")</button>
+                <button class="btn btn-sm btn-outline" id="btnOrders" onclick="switchSalesChart('orders')"> @(isAr ? "طلبات" : "Orders")</button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="chart-container" style="height:240px"><canvas id="revenueChart"></canvas></div>
+        </div>
+    </div>
+</div>
+
+@* ── REVENUE vs COGS vs EXPENSES vs PROFIT BAR ────────────── *@
+<div class="card" style="margin-bottom:20px">
+    <div class="card-header">
+        <h3 class="card-title">
+            <i class="fas fa-chart-bar me-2" style="color:#f59e0b"></i>
+            @(isAr ? "مقارنة: إيراد / تكلفة / مصروفات / ربح (آخر 14 يوم)" : "Revenue vs COGS vs Expenses vs Profit — Last 14 Days")
+        </h3>
+        <div style="display:flex;gap:12px;font-size:12px;flex-wrap:wrap">
+            <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#2563a8;margin-right:4px"></span>@(isAr ? "إيراد" : "Revenue")</span>
+            <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#f59e0b;margin-right:4px"></span>@(isAr ? "تكلفة" : "COGS")</span>
+            <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#8b5cf6;margin-right:4px"></span>@(isAr ? "مصروفات" : "Expenses")</span>
+            <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#22c55e;margin-right:4px"></span>@(isAr ? "ربح صافي" : "Net Profit")</span>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="chart-container" style="height:220px"><canvas id="comparisonChart"></canvas></div>
+    </div>
+</div>
+
+@* ── BOTTOM ROW ────────────────────────────────────────────── *@
+<div class="grid grid-2">
+
+    @* Category Doughnut *@
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-chart-pie me-2"></i>
+                @(isAr ? "الإيرادات حسب الفئة" : "Revenue by Category")
+            </h3>
+        </div>
+        <div class="card-body">
+            <div class="chart-container" style="height:240px"><canvas id="categoryChart"></canvas></div>
+        </div>
+    </div>
+
+    @* Month Financial Summary *@
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">
+                <i class="fas fa-calculator me-2"></i>
+                @(isAr ? "ملخص الشهر المالي" : "Month Financial Summary")
+            </h3>
+        </div>
+        <div class="card-body" style="padding:14px 18px">
+            @{
+                var avgOrder = Model.MonthOrders > 0 ? Model.MonthSales / Model.MonthOrders : 0;
+                var summaryRows = new (string Label, string Value, string Color, bool Bold)[] {
+                    (isAr?"إجمالي الطلبات":"Total Orders",          Model.MonthOrders.ToString(),                    "#2563a8", false),
+                    (isAr?"إجمالي الإيراد":"Gross Revenue",          Fmt(Model.MonthSales)+" ج.م",                   "#2563a8", false),
+                    (isAr?"إجمالي المرتجعات":"Total Refunds",        "−"+Fmt(Model.TodayRefundAmount)+" ج.م",        "#ef4444", false),
+                    (isAr?"صافي الإيراد":"Net Revenue",              Fmt(Model.MonthSales)+" ج.م",                   "#2563a8", true),
+                    (isAr?"تكلفة البضاعة (COGS)":"Cost of Goods",   "−"+Fmt(Model.MonthCogs)+" ج.م",               "#f59e0b", false),
+                    (isAr?"الربح الإجمالي":"Gross Profit",           Fmt(Model.MonthGrossProfit)+" ج.م",             PC(Model.MonthGrossProfit), true),
+                    (isAr?"المصروفات التشغيلية":"Operating Exp.",    "−"+Fmt(Model.MonthExpenses)+" ج.م",           "#8b5cf6", false),
+                    (isAr?"صافي الربح":"Net Profit",                  Fmt(Model.MonthNetProfit)+" ج.م",              PC(Model.MonthNetProfit), true),
+                    (isAr?"هامش الربح الصافي":"Net Profit Margin",   Model.MonthProfitMargin+"%",                    PC(Model.MonthProfitMargin), false),
+                    (isAr?"متوسط قيمة الطلب":"Avg Order Value",      Fmt(avgOrder)+" ج.م",                           "#2563a8", false),
+                    (isAr?"نمو الإيرادات":"Revenue Growth",          (Model.RevenueGrowth>=0?"+":"")+Model.RevenueGrowth+"%", PC(Model.RevenueGrowth), false),
+                    (isAr?"نمو الربح الصافي":"Profit Growth",        (Model.ProfitGrowth>=0?"+":"")+Model.ProfitGrowth+"%",   PC(Model.ProfitGrowth), true),
+                };
+            }
+            @foreach (var row in summaryRows)
+            {
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:@(row.Bold ? "9px 8px" : "6px 0");@(row.Bold ? "background:var(--bg-secondary);border-radius:6px;margin:3px -4px;padding:8px 8px;" : "border-bottom:1px solid var(--border);")font-size:13px">
+                    <span style="color:var(--text-muted)">@row.Label</span>
+                    <strong style="color:@row.Color">@row.Value</strong>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@* ── TOP PRODUCTS ──────────────────────────────────────────── *@
+<div class="card" style="margin-top:20px">
+    <div class="card-header">
+        <h3 class="card-title">@(isAr ? "أعلى المنتجات مبيعاً (مع هامش الربح)" : "Top Selling Products (with Profit Margin)")</h3>
+        <a href="/Admin/Products" class="btn btn-outline btn-sm">@(isAr ? "عرض الكل" : "View All")</a>
+    </div>
+    <div class="card-body" style="padding:0">
+        @foreach (var (p, i) in Model.TopProducts.Select((p, i) => (p, i)))
+        {
+            var pct = Model.TopProducts.Any() ? (p.Revenue / Model.TopProducts.Max(x => x.Revenue)) * 100 : 0;
+            var profit = p.Revenue - (p.CostPrice * p.Quantity);
+            var margin = p.Revenue > 0 ? (profit / p.Revenue) * 100 : 0;
+            <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px">
+                <div style="width:28px;height:28px;background:var(--primary-light);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;flex-shrink:0">@(i + 1)</div>
+                <div style="flex:1;min-width:0">
+                    <div style="font-size:13px;font-weight:600;margin-bottom:4px">
+                        <span data-lang="ar">@(string.IsNullOrEmpty(p.NameAr) ? p.Name : p.NameAr)</span>
+                        <span data-lang="en" style="display:none">@p.Name</span>
+                    </div>
+                    <div class="progress"><div class="progress-bar" style="width:@pct%"></div></div>
+                </div>
+                <div style="display:flex;gap:20px;flex-shrink:0;font-size:12px;text-align:center">
+                    <div>
+                        <div style="font-weight:800;color:var(--primary)">@Fmt(p.Revenue)</div>
+                        <div style="color:var(--text-muted)">@(isAr ? "إيراد" : "Revenue")</div>
+                    </div>
+                    <div>
+                        <div style="font-weight:800;color:@PC(profit)">@Fmt(profit)</div>
+                        <div style="color:var(--text-muted)">@(isAr ? "ربح" : "Profit")</div>
+                    </div>
+                    <div>
+                        <div style="font-weight:800;color:@PC(margin)">@margin.ToString("F0")%</div>
+                        <div style="color:var(--text-muted)">@(isAr ? "هامش" : "Margin")</div>
+                    </div>
+                    <div>
+                        <div style="font-weight:700;color:var(--text-muted)">@p.Quantity</div>
+                        <div style="color:var(--text-muted)">@(isAr ? "قطعة" : "sold")</div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@* ── QUICK ACTIONS ─────────────────────────────────────────── *@
+<div class="card" style="margin-top:20px">
+    <div class="card-header"><h3 class="card-title">@(isAr ? "إجراءات سريعة" : "Quick Actions")</h3></div>
+    <div class="card-body">
+        <div class="grid grid-4" style="gap:10px">
+            <a href="/Cashier/Index" class="btn btn-primary" style="justify-content:center;padding:14px"><i class="fas fa-cash-register me-2"></i>@(isAr ? "كاشير" : "POS")</a>
+            <a href="/Admin/Products/CreateProduct" class="btn btn-accent" style="justify-content:center;padding:14px"><i class="fas fa-plus me-2"></i>@(isAr ? "منتج جديد" : "New Product")</a>
+            <a href="/Admin/Orders" class="btn btn-outline" style="justify-content:center;padding:14px"><i class="fas fa-receipt me-2"></i>@(isAr ? "الطلبات" : "Orders")</a>
+            <a href="/Admin/Expenses" class="btn btn-outline" style="justify-content:center;padding:14px"><i class="fas fa-file-invoice-dollar me-2"></i>@(isAr ? "المصروفات" : "Expenses")</a>
+            <a href="/Admin/Reports" class="btn btn-outline" style="justify-content:center;padding:14px"><i class="fas fa-chart-bar me-2"></i>@(isAr ? "التقارير" : "Reports")</a>
+            <a href="/Admin/Inventory" class="btn btn-outline" style="justify-content:center;padding:14px"><i class="fas fa-boxes me-2"></i>@(isAr ? "المخزون" : "Inventory")</a>
+            <a href="/Admin/Users" class="btn btn-outline" style="justify-content:center;padding:14px"><i class="fas fa-users me-2"></i>@(isAr ? "المستخدمون" : "Users")</a>
+            <a href="/Refund/AdminRefunds" class="btn btn-outline" style="justify-content:center;padding:14px;color:#ef4444;border-color:#ef4444"><i class="fas fa-undo-alt me-2"></i>@(isAr ? "المرتجعات" : "Refunds")</a>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const profitData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+                    Model.DailyProfit.Select(d => new
+                    {
+                            date = d.Date.ToString("MM/dd"),
+                            revenue = d.Revenue,
+                            cogs = d.Cogs,
+                            expenses = d.Expenses,
+                            grossProfit = d.GrossProfit,
+                            netProfit = d.NetProfit,
+                            orders = d.Orders
+                    })
+            ));
+        const catData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+                    Model.CategoryRevenue.Select(c => new { name = c.Name, nameAr = c.NameAr, colorHex = c.ColorHex, revenue = c.Revenue })
+            ));
+        const isAr = localStorage.getItem('erp-lang') !== 'en';
+        const labels = profitData.map(d => d.date);
+
+        // ── Profit Chart ──────────────────────────────────────────────
+        function renderProfitChart(metric = 'net') {
+            const cfgMap = {
+                net:     { data: profitData.map(d => d.netProfit),   color: '#22c55e', label: isAr ? 'صافي الربح'     : 'Net Profit'   },
+                gross:   { data: profitData.map(d => d.grossProfit), color: '#f59e0b', label: isAr ? 'الربح الإجمالي' : 'Gross Profit' },
+                revenue: { data: profitData.map(d => d.revenue),     color: '#2563a8', label: isAr ? 'الإيراد'         : 'Revenue'      }
+            };
+            const cfg = cfgMap[metric];
+            createChart('profitChart', {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: cfg.label,
+                        data: cfg.data,
+                        borderColor: cfg.color,
+                        backgroundColor: cfg.color + '18',
+                        borderWidth: 2.5, fill: true, tension: 0.4,
+                        pointRadius: 3, pointHoverRadius: 6,
+                        pointBackgroundColor: cfg.data.map(v => v >= 0 ? cfg.color : '#ef4444'),
+                        segment: { borderColor: ctx => ctx.p0.parsed.y < 0 ? '#ef4444' : cfg.color }
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false },
+                        tooltip: { callbacks: { label: ctx => ' ' + ctx.parsed.y.toLocaleString() + ' EGP' } }
+                    },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } },
+                        y: { grid: { color: 'rgba(150,150,150,0.1)' },
+                             ticks: { callback: v => v.toLocaleString() } }
+                    }
+                }
+            });
+        }
+
+        function switchProfitChart(metric) {
+            ['btnNetProfit','btnGrossProfit','btnRevChart'].forEach(id => {
+                const b = document.getElementById(id);
+                if (b) { b.className = 'btn btn-sm btn-outline'; }
+            });
+            const idMap = { net:'btnNetProfit', gross:'btnGrossProfit', revenue:'btnRevChart' };
+            const b = document.getElementById(idMap[metric]);
+            if (b) b.className = 'btn btn-sm btn-primary';
+            renderProfitChart(metric);
+        }
+
+        // ── Sales Chart ───────────────────────────────────────────────
+        function renderSalesChart(type = 'revenue') {
+            createChart('revenueChart', {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: type === 'revenue' ? (isAr ? 'الإيراد' : 'Revenue (EGP)') : (isAr ? 'الطلبات' : 'Orders'),
+                        data: type === 'revenue' ? profitData.map(d => d.revenue) : profitData.map(d => d.orders),
+                        borderColor: '#2563a8', backgroundColor: 'rgba(37,99,168,0.08)',
+                        borderWidth: 2.5, fill: true, tension: 0.4,
+                        pointBackgroundColor: '#2563a8', pointRadius: 3, pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } },
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        function switchSalesChart(type) {
+            ['btnRevenue','btnOrders'].forEach(id => {
+                const b = document.getElementById(id);
+                if (b) b.className = 'btn btn-sm btn-outline';
+            });
+            const idMap = { revenue:'btnRevenue', orders:'btnOrders' };
+            const b = document.getElementById(idMap[type]);
+            if (b) b.className = 'btn btn-sm btn-primary';
+            renderSalesChart(type);
+        }
+
+        // ── Comparison Bar Chart ──────────────────────────────────────
+        function renderComparisonChart() {
+            const slice = profitData.slice(-14);
+            createChart('comparisonChart', {
+                type: 'bar',
+                data: {
+                    labels: slice.map(d => d.date),
+                    datasets: [
+                        { label: isAr?'إيراد':'Revenue',    data: slice.map(d => d.revenue),     backgroundColor: 'rgba(37,99,168,0.75)',  borderRadius: 3 },
+                        { label: isAr?'تكلفة':'COGS',       data: slice.map(d => d.cogs),         backgroundColor: 'rgba(245,158,11,0.75)', borderRadius: 3 },
+                        { label: isAr?'مصروفات':'Expenses', data: slice.map(d => d.expenses),     backgroundColor: 'rgba(139,92,246,0.75)', borderRadius: 3 },
+                        { label: isAr?'ربح صافي':'Net Profit',
+                          data: slice.map(d => d.netProfit),
+                          backgroundColor: slice.map(d => d.netProfit >= 0 ? 'rgba(34,197,94,0.8)' : 'rgba(239,68,68,0.8)'),
+                          borderRadius: 3 }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'top', labels: { boxWidth: 12, padding: 12, font: { size: 11 } } } },
+                    scales: {
+                        x: { grid: { display: false } },
+                        y: { grid: { color: 'rgba(150,150,150,0.1)' }, ticks: { callback: v => v.toLocaleString() } }
+                    }
+                }
+            });
+        }
+
+        // ── Category Doughnut ─────────────────────────────────────────
+        function renderCategoryChart() {
+            createChart('categoryChart', {
+                type: 'doughnut',
+                data: {
+                    labels: catData.map(c => isAr ? (c.nameAr || c.name) : c.name),
+                    datasets: [{
+                        data: catData.map(c => c.revenue),
+                        backgroundColor: catData.map(c => c.colorHex),
+                        borderWidth: 2,
+                        borderColor: document.documentElement.getAttribute('data-theme') === 'dark' ? '#1e293b' : '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'right', labels: { font: { size: 12 }, padding: 12, boxWidth: 12 } } },
+                    cutout: '62%'
+                }
+            });
+        }
+
+        // ── Init ──────────────────────────────────────────────────────
+        document.addEventListener('DOMContentLoaded', () => {
+            renderProfitChart('net');
+            renderSalesChart('revenue');
+            renderComparisonChart();
+            renderCategoryChart();
+        });
+
+        // Redraw on theme change
+        new MutationObserver(() => {
+            renderProfitChart('net');
+            renderSalesChart('revenue');
+            renderComparisonChart();
+            renderCategoryChart();
+        }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    </script>
+}

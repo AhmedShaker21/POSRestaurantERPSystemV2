@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="__RequestVerificationToken" content="@Antiforgery.GetTokens(Context).RequestToken">
+    <title>@(ViewBag.Title ?? "نادي دار الطائرات - ERP")</title>
+<link rel="stylesheet" href="~/css/fonts.css" />
+    <link rel="stylesheet" href="~/lib/fontawesome/css/all.min.css" />
+    <link rel="stylesheet" href="~/css/main.css" asp-append-version="true">
+    @RenderSection("HeadStyles", required: false)
+</head>
+<body>
+    <div class="app-wrapper">
+
+        @if (User.Identity?.IsAuthenticated == true)
+        {
+            <!-- SIDEBAR -->
+            <aside class="sidebar" id="sidebar">
+                <div class="sidebar-brand">
+                    <div class="logo-icon">✈️</div>
+                    <div class="brand-text">
+                        <div class="brand-name">نادي دار الطائرات</div>
+                        <div class="brand-sub">نظام إدارة المطعم</div>
+                    </div>
+                </div>
+
+                <nav class="sidebar-nav">
+                    @if (User.IsInRole("Admin"))
+                    {
+                        <div class="sidebar-section-title">الرئيسية</div>
+                        <a class="sidebar-link" href="/Admin/Index"><span class="nav-icon">📊</span><span>لوحة التحكم</span></a>
+
+                        <div class="sidebar-section-title">نقطة البيع</div>
+                        <a class="sidebar-link" href="/Cashier/Index"><span class="nav-icon">💰</span><span>الكاشير</span></a>
+                        <a class="sidebar-link" href="/Cashier/History"><span class="nav-icon">📋</span><span>سجل الطلبات</span></a>
+                        <a class="sidebar-link" href="/Waiter/Tables"><span class="nav-icon">🪑</span><span>شاشة الطاولات</span></a>
+                        <a class="sidebar-link" href="/Waiter/Index"><span class="nav-icon">📝</span><span>طلب سريع (صالة)</span></a>
+                        <a class="sidebar-link" href="/Waiter/MyOrders"><span class="nav-icon">🧾</span><span>طلبات الصالة</span></a>
+                        <a class="sidebar-link" href="/Kitchen/Index"><span class="nav-icon">👨‍🍳</span><span>المطبخ</span></a>
+
+                        <div class="sidebar-section-title">إدارة المنتجات</div>
+                        <a class="sidebar-link" href="/Admin/Products"><span class="nav-icon">🍽️</span><span>المنتجات</span></a>
+                        <a class="sidebar-link" href="/Admin/Categories"><span class="nav-icon">📂</span><span>الفئات</span></a>
+
+                        <div class="sidebar-section-title">المخزن</div>
+                        <a class="sidebar-link" href="/Inventory/Dashboard"><span class="nav-icon">🏬</span><span>لوحة المخزن</span></a>
+                        <a class="sidebar-link" href="/Inventory/Receipts"><span class="nav-icon">📥</span><span>ايصالات التوريد</span></a>
+                        <a class="sidebar-link" href="/Inventory/Distribution"><span class="nav-icon">🚚</span><span>توزيع المنتجات</span></a>
+                        <a class="sidebar-link" href="/Inventory/Expiry"><span class="nav-icon">⏳</span><span>متابعة الصلاحية</span></a>
+                        <a class="sidebar-link" href="/Inventory/WhyNotVisible"><span class="nav-icon">🔎</span><span>تشخيص ظهور الأصناف</span></a>
+                        <a class="sidebar-link" href="/Inventory/Suppliers"><span class="nav-icon">🚚</span><span>الموردون</span></a>
+                        <a class="sidebar-link" href="/Inventory/Report"><span class="nav-icon">📊</span><span>تقرير المخزن</span></a>
+
+                        <div class="sidebar-section-title">العمليات</div>
+                        <a class="sidebar-link" href="/Admin/Orders"><span class="nav-icon">📋</span><span>الطلبات</span></a>
+                        <a class="sidebar-link" href="/Refund/AdminRefunds"><span class="nav-icon">🔄</span><span>المرتجعات</span></a>
+                        <a class="sidebar-link" href="/Refund/Index"><span class="nav-icon">↩️</span><span>معالجة مرتجع جديد</span></a>
+                        <a class="sidebar-link" href="/Admin/Tables"><span class="nav-icon">🪑</span><span>إعداد الطاولات</span></a>
+                        <a class="sidebar-link" href="/Admin/Expenses"><span class="nav-icon">💸</span><span>المصروفات</span></a>
+                        <a class="sidebar-link" href="/Admin/Shifts"><span class="nav-icon">🕐</span><span>الورديات</span></a>
+
+                        <div class="sidebar-section-title">التحليلات</div>
+                        <a class="sidebar-link" href="/Admin/Reports"><span class="nav-icon">📈</span><span>التقارير</span></a>
+                        <a class="sidebar-link" href="/Admin/DailyReport"><span class="nav-icon">🧾</span><span>التقرير اليومي</span></a>
+                        <a class="sidebar-link" href="/Admin/RevenueAnalysis"><span class="nav-icon">💹</span><span>تحليل الإيرادات والأرباح</span></a>
+                        <a class="sidebar-link" href="/Branch/Analytics"><span class="nav-icon">🏢</span><span>مقارنة الفروع</span></a>
+
+                        <div class="sidebar-section-title">شاشات المدير</div>
+                        <a class="sidebar-link" href="/Manager/Index"><span class="nav-icon">🎯</span><span>لوحة المدير</span></a>
+                        <a class="sidebar-link" href="/Manager/Orders"><span class="nav-icon">📋</span><span>طلبات المدير</span></a>
+                        <a class="sidebar-link" href="/Manager/Reports"><span class="nav-icon">📊</span><span>تقارير المدير</span></a>
+
+                        <div class="sidebar-section-title">النظام</div>
+                        <a class="sidebar-link" href="/Branch/Index"><span class="nav-icon">🏢</span><span>الفروع</span></a>
+                        <a class="sidebar-link" href="/Admin/Users"><span class="nav-icon">👥</span><span>المستخدمون</span></a>
+                        <a class="sidebar-link" href="/Admin/Settings"><span class="nav-icon">⚙️</span><span>الإعدادات</span></a>
+                    }
+                    else if (User.IsInRole("Manager"))
+                    {
+                        <div class="sidebar-section-title">الرئيسية</div>
+                        <a class="sidebar-link" href="/Admin/Index"><span class="nav-icon">📊</span><span>لوحة التحكم</span></a>
+
+                        <div class="sidebar-section-title">المخزن</div>
+                        <a class="sidebar-link" href="/Inventory/Dashboard"><span class="nav-icon">🏬</span><span>لوحة المخزن</span></a>
+                        <a class="sidebar-link" href="/Inventory/Receipts"><span class="nav-icon">📥</span><span>ايصالات التوريد</span></a>
+                        <a class="sidebar-link" href="/Inventory/Distribution"><span class="nav-icon">🚚</span><span>توزيع المنتجات</span></a>
+                        <a class="sidebar-link" href="/Inventory/Expiry"><span class="nav-icon">⏳</span><span>متابعة الصلاحية</span></a>
+                        <a class="sidebar-link" href="/Inventory/WhyNotVisible"><span class="nav-icon">🔎</span><span>تشخيص ظهور الأصناف</span></a>
+                        <a class="sidebar-link" href="/Inventory/Suppliers"><span class="nav-icon">🚚</span><span>الموردون</span></a>
+                        <a class="sidebar-link" href="/Inventory/Report"><span class="nav-icon">📊</span><span>تقرير المخزن</span></a>
+
+                        <div class="sidebar-section-title">العمليات</div>
+                        <a class="sidebar-link" href="/Refund/AdminRefunds"><span class="nav-icon">🔄</span><span>المرتجعات</span></a>
+                        <a class="sidebar-link" href="/Refund/Index"><span class="nav-icon">↩️</span><span>معالجة مرتجع جديد</span></a>
+
+                        <div class="sidebar-section-title">التحليلات</div>
+                        <a class="sidebar-link" href="/Admin/Reports"><span class="nav-icon">📈</span><span>التقارير</span></a>
+                        <a class="sidebar-link" href="/Admin/DailyReport"><span class="nav-icon">🧾</span><span>التقرير اليومي</span></a>
+                        <a class="sidebar-link" href="/Admin/RevenueAnalysis"><span class="nav-icon">💹</span><span>تحليل الإيرادات والأرباح</span></a>
+                    }
+                    else if (User.IsInRole("Cashier"))
+                    {
+                        @* Cashier now covers what used to be the Waiter role *@
+                        <a class="sidebar-link" href="/Cashier/Index"><span class="nav-icon">💰</span><span>الكاشير</span></a>
+                        <a class="sidebar-link" href="/Waiter/Tables"><span class="nav-icon">🪑</span><span>الطاولات</span></a>
+                        <a class="sidebar-link" href="/Waiter/Index"><span class="nav-icon">📝</span><span>طلب سريع (صالة)</span></a>
+                        <a class="sidebar-link" href="/Cashier/History"><span class="nav-icon">📋</span><span>سجل الطلبات</span></a>
+                    }
+                    else if (User.IsInRole("Kitchen"))
+                    {
+                        <a class="sidebar-link" href="/Kitchen/Index"><span class="nav-icon">👨‍🍳</span><span>المطبخ</span></a>
+                    }
+                    else if (User.IsInRole("محصل"))
+                    {
+                        <div class="sidebar-section-title">المنتجات</div>
+                        <a class="sidebar-link" href="/Admin/Products"><span class="nav-icon">🍽️</span><span>المنتجات</span></a>
+                    }
+                </nav>
+
+                <div class="sidebar-footer">
+                    <div class="user-card">
+                        <div class="user-avatar">@(User.Identity?.Name?.Substring(0, 1).ToUpper() ?? "U")</div>
+                        <div class="user-info">
+                            <div class="user-name">@User.Identity?.Name</div>
+                            <div class="user-role">
+                                @if (User.IsInRole("Admin"))
+                                {
+                                    <span>مدير النظام</span>
+                                }
+                                else if (User.IsInRole("Manager"))
+                                {
+
+                                    <span>مدير</span>
+                                }
+                                else if (User.IsInRole("Cashier"))
+                                {
+
+                                    <span>كاشير</span>
+                                }
+                                else if (User.IsInRole("Kitchen"))
+                                {
+
+                                    <span>مطبخ</span>
+                                }
+                                else if (User.IsInRole("محصل"))
+                                {
+                                    <span>محصل</span>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                    <form method="post" action="/Account/Logout" style="margin-top:8px">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-outline w-full btn-sm">
+                            <span>🚪</span> <span>تسجيل الخروج</span>
+                        </button>
+                    </form>
+                </div>
+            </aside>
+        }
+
+        <!-- MAIN -->
+        <div class="main-content">
+            @if (User.Identity?.IsAuthenticated == true)
+            {
+                <!-- TOPBAR -->
+                <header class="topbar">
+                    <button class="topbar-btn" onclick="toggleSidebar()" title="القائمة">☰</button>
+                    <h1 class="topbar-title">@(ViewBag.PageTitle ?? "نادي دار الطائرات")</h1>
+                    <div class="topbar-actions">
+                        <button class="topbar-btn" id="themeToggle" title="تبديل المظهر">🌙</button>
+                    </div>
+                </header>
+            }
+
+            <!-- CONTENT -->
+            <main class="page-content">
+                @if (TempData["Success"] != null)
+                {
+                    <div class="alert alert-success">✅ @TempData["Success"]</div>
+                }
+                @if (TempData["Error"] != null)
+                {
+                    <div class="alert alert-danger">❌ @TempData["Error"]</div>
+                }
+                @RenderBody()
+            </main>
+        </div>
+    </div>
+
+    <!-- TOAST CONTAINER -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- SCRIPTS -->
+    <script src="~/lib/js/chart.umd.min.js"></script>
+    <script src="~/js/main.js" asp-append-version="true"></script>
+    @RenderSection("Scripts", required: false)
+
+    @using Microsoft.AspNetCore.Antiforgery
+@inject IAntiforgery Antiforgery
+</body>
+</html>

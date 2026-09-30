@@ -1,0 +1,214 @@
+﻿@model IEnumerable<RestaurantERP.Controllers.BranchStatDto>
+@{
+    ViewData["Title"] = "Branch Analytics";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var total = Model.Sum(b => b.MonthSales);
+}
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title"><i class="fas fa-chart-bar me-2" style="color:var(--primary)"></i>Branch Analytics</h1>
+        <p class="page-subtitle">Cross-branch performance comparison</p>
+    </div>
+    <div class="d-flex gap-2">
+        <select id="periodSelect" class="form-control" style="max-width:160px" onchange="loadChart(this.value)">
+            <option value="7">Last 7 Days</option>
+            <option value="30" selected>Last 30 Days</option>
+            <option value="90">Last 90 Days</option>
+        </select>
+        <a href="/Branch/Index" class="btn btn-outline"><i class="fas fa-cog me-2"></i>Manage</a>
+    </div>
+</div>
+
+<!-- Combined KPIs -->
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px">
+    <div class="card" style="padding:18px;border-left:4px solid #2563a8">
+        <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px"><i class="fas fa-coins me-1" style="color:#2563a8"></i>Total Month Revenue</div>
+        <div style="font-size:22px;font-weight:800;color:#2563a8">@total.ToString("N0") EGP</div>
+        <div style="font-size:11px;color:var(--text-muted)">All branches combined</div>
+    </div>
+    <div class="card" style="padding:18px;border-left:4px solid #22c55e">
+        <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px"><i class="fas fa-arrow-trend-up me-1" style="color:#22c55e"></i>Total Net Profit</div>
+        <div style="font-size:22px;font-weight:800;color:#22c55e">@Model.Sum(b => b.MonthProfit).ToString("N0") EGP</div>
+        <div style="font-size:11px;color:var(--text-muted)">After expenses</div>
+    </div>
+    <div class="card" style="padding:18px;border-left:4px solid #f59e0b">
+        <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px"><i class="fas fa-receipt me-1" style="color:#f59e0b"></i>Total Orders</div>
+        <div style="font-size:22px;font-weight:800;color:#f59e0b">@Model.Sum(b => b.MonthOrders)</div>
+        <div style="font-size:11px;color:var(--text-muted)">This month</div>
+    </div>
+    <div class="card" style="padding:18px;border-left:4px solid #8b5cf6">
+        <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px"><i class="fas fa-users me-1" style="color:#8b5cf6"></i>Active Branches</div>
+        <div style="font-size:22px;font-weight:800;color:#8b5cf6">@Model.Count()</div>
+        <div style="font-size:11px;color:var(--text-muted)">Operating today</div>
+    </div>
+</div>
+
+<!-- Branch Comparison Cards -->
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;margin-bottom:24px">
+    @foreach (var stat in Model.OrderByDescending(b => b.MonthSales))
+    {
+        var sharePercent = total > 0 ? (stat.MonthSales / total * 100) : 0;
+        <div class="card" style="border-top:4px solid @stat.Branch.ColorHex">
+            <div class="card-body" style="padding:18px">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+                    <span style="font-size:28px">@stat.Branch.Icon</span>
+                    <div>
+                        <div style="font-size:15px;font-weight:800">@stat.Branch.Name</div>
+                        <div style="font-size:12px;color:var(--text-muted)" dir="rtl">@stat.Branch.NameAr</div>
+                    </div>
+                    @if (stat.Branch.IsMainBranch)
+                    {
+                        <span style="margin-left:auto;background:#2563a822;color:#2563a8;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700">MAIN</span>
+                    }
+                </div>
+
+                <!-- Revenue share bar -->
+                <div style="margin-bottom:14px">
+                    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-bottom:4px">
+                        <span>Revenue share</span>
+                        <strong style="color:@stat.Branch.ColorHex">@sharePercent.ToString("F1")%</strong>
+                    </div>
+                    <div style="background:var(--bg-secondary);border-radius:4px;height:8px">
+                        <div style="width:@sharePercent.ToString("F0")%;background:@stat.Branch.ColorHex;height:100%;border-radius:4px;transition:width .5s"></div>
+                    </div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                    @{
+                        var metrics = new[] {
+                            ("Today Sales",    stat.TodaySales.ToString("N0"),   "#2563a8"),
+                            ("Today Orders",   stat.TodayOrders.ToString(),      "#2563a8"),
+                            ("Month Revenue",  stat.MonthSales.ToString("N0"),   stat.Branch.ColorHex),
+                            ("Month Profit",   stat.MonthProfit.ToString("N0"),  stat.MonthProfit >= 0 ? "#22c55e" : "#ef4444"),
+                            ("Active Tables",  stat.ActiveTables.ToString(),     "#f59e0b"),
+                            ("Pending Orders", stat.PendingOrders.ToString(),    stat.PendingOrders > 5 ? "#ef4444" : "#22c55e"),
+                        };
+                    }
+                    @foreach (var (label, value, color) in metrics)
+                    {
+                        <div style="background:var(--bg-secondary);border-radius:8px;padding:8px 10px">
+                            <div style="font-size:10px;color:var(--text-muted);margin-bottom:2px">@label</div>
+                            <div style="font-size:14px;font-weight:800;color:@color">@value</div>
+                        </div>
+                    }
+                </div>
+
+                <div style="margin-top:12px;display:flex;gap:8px">
+                    <button class="btn btn-sm btn-outline" style="flex:1" onclick="switchToBranch(@stat.Branch.Id)">
+                        <i class="fas fa-exchange-alt me-1"></i>Switch to
+                    </button>
+                    <a href="/Branch/Index" class="btn btn-sm btn-outline" style="flex:1">
+                        <i class="fas fa-cog me-1"></i>Manage
+                    </a>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Revenue Trend Chart (all branches overlaid) -->
+<div class="card" style="margin-bottom:20px">
+    <div class="card-header">
+        <h3 class="card-title"><i class="fas fa-chart-line me-2"></i>Revenue Trend — All Branches</h3>
+    </div>
+    <div class="card-body" style="padding:20px">
+        <div style="height:280px"><canvas id="branchTrendChart"></canvas></div>
+    </div>
+</div>
+
+<!-- Side by side: Revenue Share Doughnut + Today's performance bar -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+    <div class="card">
+        <div class="card-header"><h3 class="card-title"><i class="fas fa-chart-pie me-2"></i>Revenue Share</h3></div>
+        <div class="card-body"><div style="height:240px"><canvas id="shareChart"></canvas></div></div>
+    </div>
+    <div class="card">
+        <div class="card-header"><h3 class="card-title"><i class="fas fa-bar-chart me-2"></i>Today's Performance</h3></div>
+        <div class="card-body"><div style="height:240px"><canvas id="todayChart"></canvas></div></div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+const branchStats = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Select(b => new {
+    branchId    = b.Branch.Id,
+    name        = b.Branch.Name,
+    nameAr      = b.Branch.NameAr,
+    color       = b.Branch.ColorHex,
+    icon        = b.Branch.Icon,
+    todaySales  = b.TodaySales,
+    todayOrders = b.TodayOrders,
+    monthSales  = b.MonthSales,
+    monthProfit = b.MonthProfit,
+    monthOrders = b.MonthOrders,
+})));
+
+const isAr = localStorage.getItem('erp-lang') !== 'en';
+
+// ── Revenue share doughnut ────────────────────────────────────
+createChart('shareChart', {
+    type: 'doughnut',
+    data: {
+        labels: branchStats.map(b => isAr ? b.nameAr : b.name),
+        datasets: [{ data: branchStats.map(b => b.monthSales), backgroundColor: branchStats.map(b => b.color), borderWidth: 2 }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { font: { size: 11 }, padding: 10, boxWidth: 12 } } }, cutout: '58%' }
+});
+
+// ── Today's performance bar ───────────────────────────────────
+createChart('todayChart', {
+    type: 'bar',
+    data: {
+        labels: branchStats.map(b => isAr ? b.nameAr : b.name),
+        datasets: [
+            { label: 'Revenue', data: branchStats.map(b => b.todaySales), backgroundColor: branchStats.map(b => b.color + 'cc'), borderRadius: 6 },
+            { label: 'Orders', data: branchStats.map(b => b.todayOrders), backgroundColor: branchStats.map(b => b.color + '55'), borderRadius: 6, yAxisID: 'y2' }
+        ]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'top', labels: { font: { size: 11 }, boxWidth: 12 } } },
+        scales: {
+            y:  { beginAtZero: true, grid: { color: 'rgba(150,150,150,.1)' }, ticks: { callback: v => v.toLocaleString() } },
+            y2: { beginAtZero: true, position: 'right', grid: { display: false } }
+        }
+    }
+});
+
+// ── Cross-branch trend (multi-line) ───────────────────────────
+async function loadChart(days) {
+    try {
+        const data = await API.get(`/Branch/GetCrossAnalytics?days=${days}`);
+        const allDates = [...new Set(data.flatMap(b => b.dailyRevenue.map(d => d.date)))].sort();
+        const datasets = data.map(b => ({
+            label: isAr ? b.branchNameAr : b.branchName,
+            data: allDates.map(d => b.dailyRevenue.find(x => x.date === d)?.revenue ?? 0),
+            borderColor: b.colorHex, backgroundColor: b.colorHex + '18',
+            borderWidth: 2.5, fill: false, tension: 0.4,
+            pointRadius: 3, pointHoverRadius: 6
+        }));
+        createChart('branchTrendChart', {
+            type: 'line',
+            data: { labels: allDates, datasets },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position: 'top', labels: { font: { size: 11 }, boxWidth: 12 } } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } },
+                    y: { beginAtZero: true, grid: { color: 'rgba(150,150,150,.1)' }, ticks: { callback: v => v.toLocaleString() } }
+                }
+            }
+        });
+    } catch(e) { console.error('Chart load failed', e); }
+}
+
+async function switchToBranch(id) {
+    const res = await API.post('/Branch/Switch', { branchId: id });
+    if (res.success) { Toast.success(`Switched to ${res.branchName}`); setTimeout(() => location.reload(), 600); }
+    else Toast.error(res.message || 'Failed to switch branch');
+}
+
+document.addEventListener('DOMContentLoaded', () => loadChart(30));
+</script>
+}

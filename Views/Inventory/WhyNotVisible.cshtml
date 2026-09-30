@@ -1,0 +1,291 @@
+@model List<RestaurantERP.Controllers.VisibilityRow>
+@{
+    ViewData["Title"] = "لماذا لا يظهر الصنف؟";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.PageTitle = "تشخيص ظهور الأصناف";
+    var branches = ViewBag.Branches as List<RestaurantERP.Models.Branch> ?? new();
+    var bid = (int)ViewBag.BranchId;
+    string N(decimal d) => d.ToString("0.###");
+
+    var isAdmin = User.IsInRole("Admin");
+    var visible = Model.Count(r => r.Visible);
+    var hidden = Model.Count - visible;
+}
+
+<div class="page-header no-print">
+    <div>
+        <h1 class="page-title">🔎 تشخيص ظهور الأصناف عند الكاشير</h1>
+        <p class="page-subtitle">الفرع: <strong>@ViewBag.BranchName</strong> — @visible ظاهر · @hidden مخفي</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline" href="/Inventory/Dashboard">⬅ لوحة المخزن</a>
+        <a class="btn btn-accent" href="/Inventory/Distribution">🚚 توزيع</a>
+    </div>
+</div>
+
+<div class="card no-print" style="margin-bottom:20px">
+    <div class="card-body">
+        <form method="get" class="d-flex gap-3 align-items-end" style="flex-wrap:wrap">
+            <div class="form-group" style="margin:0">
+                <label class="form-label">اختر الفرع</label>
+                <select name="branchId" class="form-control" onchange="this.form.submit()">
+                    @foreach (var b in branches)
+                    {
+                        <option value="@b.Id" selected="@(b.Id == bid)">@b.NameAr</option>
+                    }
+                </select>
+            </div>
+        </form>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:10px;line-height:1.8">
+            الصنف بيظهر عند كاشير الفرع لو <strong>كل</strong> الشروط دي متحققة:
+            الصنف نشط ← ومتاح ← وموزَّع على الفرع ده ← وموزَّع كـ«للبيع» مش «خامة» ← ومفعّل في الفرع.
+            أي شرط ناقص هيمنعه، والعمود الأخير بيقولك السبب بالظبط.
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">📋 كل الأصناف</h3>
+        <input type="text" class="form-control no-print" style="max-width:220px" placeholder="بحث..." oninput="filterPagedTable('visTable', this.value)">
+    </div>
+    <div class="table-container">
+        <table class="data-table" id="visTable">
+            <thead>
+                <tr>
+                    <th>الصنف</th>
+                    <th>الفئة</th>
+                    <th>نشط</th>
+                    <th>متاح</th>
+                    <th>موزَّع للفرع</th>
+                    <th>للبيع</th>
+                    <th>مفعّل بالفرع</th>
+                    <th>الرصيد</th>
+                    <th>السعر النهائي</th>
+                    <th>النتيجة</th>
+                    <th class="no-print">إجراءات</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!Model.Any())
+                {
+                    <tr data-empty="1"><td colspan="11" style="text-align:center;color:var(--text-muted)">لا توجد أصناف</td></tr>
+                }
+                @foreach (var r in Model)
+                {
+                    <tr style="background:@(r.Visible ? "" : "#EF444410")">
+                        <td style="font-weight:600">@r.Product</td>
+                        <td style="font-size:11px;color:var(--text-muted)">@r.Category</td>
+                        <td>@(r.IsActive ? "✅" : "❌")</td>
+                        <td>@(r.ProductAvailable ? "✅" : "❌")</td>
+                        <td>@(r.HasBranchRow ? "✅" : "❌")</td>
+                        <td>@(r.BranchSellable == null ? "—" : r.BranchSellable.Value ? "✅" : "❌ خامة")</td>
+                        <td>@(r.BranchAvailable == null ? "—" : r.BranchAvailable.Value ? "✅" : "❌")</td>
+                        <td>
+                            <strong style="color:@(r.BranchStock > 0 ? "inherit" : "var(--danger)")">@N(r.BranchStock)</strong>
+                            <span style="font-size:10px;color:var(--text-muted)">@r.Unit</span>
+                        </td>
+                        <td>
+                            @if (r.SellingPrice <= 0)
+                            {
+                                <span style="color:var(--danger);font-weight:700">0 ⚠️</span>
+                            }
+                            else
+                            {
+                                <span>@N(r.FinalPrice) ج.م</span>
+                            }
+                        </td>
+                        <td>
+                            @if (r.Visible)
+                            {
+                                <span class="badge" style="background:#16A34A22;color:#16A34A;font-weight:800">✅ يظهر</span>
+                                @if (r.SellingPrice <= 0)
+                                {
+                                    <div style="font-size:10px;color:var(--danger);margin-top:3px">لكن بسعر صفر — حدد سعر البيع</div>
+                                }
+                            }
+                            else
+                            {
+                                <span class="badge" style="background:#EF444422;color:#EF4444;font-weight:800">❌ مخفي</span>
+                                <ul style="margin:4px 0 0;padding-inline-start:16px;font-size:11px;color:var(--danger)">
+                                    @foreach (var why in r.Reasons)
+                                    {
+                                        <li>@why</li>
+                                    }
+                                </ul>
+                            }
+                        </td>
+                        <td class="no-print" style="white-space:nowrap">
+                            @if (isAdmin)
+                            {
+                                @if (!r.Visible && r.HasBranchRow)
+                                {
+                                    <button class="btn btn-sm btn-accent" onclick="makeVisible(@r.ProductId)">✅ خلّيه يظهر</button>
+                                }
+                                else if (!r.HasBranchRow)
+                                {
+                                    <a class="btn btn-sm btn-accent" href="/Inventory/Distribution?productId=@r.ProductId">🚚 وزّعه</a>
+                                }
+                                <button class="btn btn-sm btn-outline" onclick="openEdit(@r.ProductId)">✏️ تعديل</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="pager no-print" id="visPager"></div>
+</div>
+
+<div class="modal-overlay" id="visModal">
+    <div class="modal" style="max-width:520px">
+        <div class="modal-header">
+            <h3 class="modal-title" id="vmTitle">✏️ تعديل ظهور الصنف</h3>
+            <button class="modal-close" onclick="Modal.close('visModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="vmProductId">
+            <div id="vmNotDistributed" style="display:none;background:#F59E0B14;border:1.5px solid #F59E0B;border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px">
+                ⚠️ الصنف ده لم يُوزَّع على الفرع ده. لو فعّلته هيظهر عند الكاشير برصيد صفر
+                لحد ما توزّع له كمية فعلية.
+            </div>
+
+            <div style="font-weight:800;font-size:12px;color:var(--text-muted);margin-bottom:8px">على مستوى الصنف (كل الفروع)</div>
+            <label class="vis-row">
+                <input type="checkbox" id="vmIsActive">
+                <div><div class="vis-t">نشط في النظام</div><div class="vis-s">لو موقوف مش هيظهر في أي مكان</div></div>
+            </label>
+            <label class="vis-row">
+                <input type="checkbox" id="vmIsAvailable">
+                <div><div class="vis-t">متاح للطلب</div><div class="vis-s">Product.IsAvailable</div></div>
+            </label>
+
+            <div style="font-weight:800;font-size:12px;color:var(--text-muted);margin:14px 0 8px" id="vmBranchTitle">في هذا الفرع</div>
+            <label class="vis-row">
+                <input type="checkbox" id="vmIsSellable">
+                <div><div class="vis-t">🛒 يتباع بالوحدة</div><div class="vis-s">لو شيلت العلامة هيتعامل كخامة ومش هيظهر للكاشير</div></div>
+            </label>
+            <label class="vis-row">
+                <input type="checkbox" id="vmBranchAvailable">
+                <div><div class="vis-t">مفعّل في هذا الفرع</div><div class="vis-s">ProductBranch.IsAvailable</div></div>
+            </label>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px">
+                <div class="form-group" style="margin:0">
+                    <label class="form-label">سعر البيع (قبل الضريبة)</label>
+                    <input type="number" step="0.01" min="0" id="vmPrice" class="form-control">
+                </div>
+                <div class="form-group" style="margin:0">
+                    <label class="form-label">حد التنبيه</label>
+                    <input type="number" step="1" min="0" id="vmMinAlert" class="form-control">
+                </div>
+            </div>
+            <div id="vmStock" style="font-size:12px;color:var(--text-muted);margin-top:10px"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="Modal.close('visModal')">إلغاء</button>
+            <button class="btn btn-primary" onclick="saveVisibility()">💾 حفظ</button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .vis-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        cursor: pointer;
+        padding: 10px 12px;
+        border: 1.5px solid var(--border);
+        border-radius: 10px;
+        margin-bottom: 8px;
+        background: var(--bg-secondary);
+    }
+
+        .vis-row input {
+            width: 18px;
+            height: 18px;
+        }
+
+        .vis-row:has(input:checked) {
+            border-color: var(--primary);
+            background: rgba(37,99,168,.08);
+        }
+
+    .vis-t {
+        font-weight: 700;
+        font-size: 13px;
+    }
+
+    .vis-s {
+        font-size: 11px;
+        color: var(--text-muted);
+    }
+</style>
+
+@section Scripts {
+    <script>
+        const VIS_BRANCH = @bid;
+
+        document.addEventListener('DOMContentLoaded', () => initPager('visTable', 'visPager'));
+
+        /* One click: clear every flag blocking this item at this branch. */
+        async function makeVisible(productId) {
+            Loading.show();
+            try {
+                const r = await API.post('/Inventory/MakeVisible', { productId, branchId: VIS_BRANCH });
+                if (r.success) {
+                    r.priceMissing ? Toast.warning(r.message) : Toast.success(r.message);
+                    setTimeout(() => location.reload(), 900);
+                } else {
+                    Toast.error(r.message || 'تعذر التعديل');
+                    if (r.needsDistribution) {
+                        setTimeout(() => location.href = '/Inventory/Distribution?productId=' + productId, 1200);
+                    }
+                }
+            } finally { Loading.hide(); }
+        }
+
+        async function openEdit(productId) {
+            Loading.show();
+            try {
+                const d = await API.get(`/Inventory/GetVisibility?productId=${productId}&branchId=${VIS_BRANCH}&t=${Date.now()}`);
+                if (!d.success) { Toast.error(d.message || 'تعذر التحميل'); return; }
+
+                document.getElementById('vmTitle').textContent = '✏️ ' + d.name;
+                document.getElementById('vmProductId').value = productId;
+                document.getElementById('vmIsActive').checked = d.isActive;
+                document.getElementById('vmIsAvailable').checked = d.isAvailable;
+                document.getElementById('vmIsSellable').checked = d.isSellable;
+                document.getElementById('vmBranchAvailable').checked = d.branchAvailable;
+                document.getElementById('vmPrice').value = d.price > 0 ? d.price : '';
+                document.getElementById('vmMinAlert').value = d.minAlert ?? '';
+                document.getElementById('vmNotDistributed').style.display = d.hasBranchRow ? 'none' : 'block';
+                document.getElementById('vmStock').textContent =
+                    d.hasBranchRow ? `الرصيد الحالي في الفرع: ${d.stock} ${d.unit}` : '';
+                Modal.open('visModal');
+            } finally { Loading.hide(); }
+        }
+
+        async function saveVisibility() {
+            const productId = parseInt(document.getElementById('vmProductId').value);
+            const notDistributed = document.getElementById('vmNotDistributed').style.display !== 'none';
+            Loading.show();
+            try {
+                const r = await API.post('/Inventory/SaveVisibility', {
+                    productId,
+                    branchId: VIS_BRANCH,
+                    isActive: document.getElementById('vmIsActive').checked,
+                    isAvailable: document.getElementById('vmIsAvailable').checked,
+                    isSellable: document.getElementById('vmIsSellable').checked,
+                    branchAvailable: document.getElementById('vmBranchAvailable').checked,
+                    sellingPrice: parseFloat(document.getElementById('vmPrice').value) || null,
+                    minStockAlert: parseInt(document.getElementById('vmMinAlert').value) || null,
+                    createBranchRow: notDistributed
+                });
+                if (r.success) { Toast.success('تم الحفظ'); setTimeout(() => location.reload(), 800); }
+                else Toast.error(r.message || 'تعذر الحفظ');
+            } finally { Loading.hide(); }
+        }
+    </script>
+}

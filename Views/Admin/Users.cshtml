@@ -1,0 +1,685 @@
+@model IEnumerable<(RestaurantERP.Models.ApplicationUser User, IList<string> Roles, List<RestaurantERP.Models.Branch> Branches)>
+@{
+    ViewData["Title"] = "إدارة المستخدمين";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var roles    = ViewBag.Roles    as List<string>                      ?? new();
+    var branches = ViewBag.Branches as List<RestaurantERP.Models.Branch> ?? new();
+
+    var roleConfig = new Dictionary<string, (string Color, string Gradient, string Icon, string Emoji, string Desc)>
+    {
+        ["Admin"]   = ("#ef4444", "135deg,#ef4444,#dc2626", "fa-shield-halved",  "👑", "صلاحية كاملة على النظام"),
+        ["Manager"] = ("#8b5cf6", "135deg,#8b5cf6,#7c3aed", "fa-user-tie",       "🎯", "إدارة العمليات والتقارير"),
+        ["Cashier"] = ("#2563a8", "135deg,#2563a8,#1d4ed8", "fa-cash-register",  "💰", "نقطة البيع والطاولات والطلبات"),
+        ["Kitchen"] = ("#f59e0b", "135deg,#f59e0b,#d97706", "fa-fire-burner",    "👨‍🍳", "شاشة المطبخ"),
+        ["محصل"]   = ("#0891b2", "135deg,#0891b2,#0e7490", "fa-clipboard-list",  "📋", "عرض المنتجات فقط"),
+    };
+}
+
+<style>
+.users-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(360px,1fr)); gap:20px; }
+.user-card { background:var(--card-bg); border-radius:20px; border:1px solid var(--border-color); box-shadow:0 2px 12px rgba(0,0,0,.06); overflow:hidden; transition:transform .25s,box-shadow .25s; position:relative; }
+.user-card:hover { transform:translateY(-4px); box-shadow:0 12px 40px rgba(0,0,0,.13); }
+.user-card.inactive { opacity:.6; }
+.card-stripe { height:5px; border-radius:20px 20px 0 0; }
+.card-hero { padding:24px 24px 18px; display:flex; gap:18px; align-items:flex-start; }
+.user-avatar { width:64px; height:64px; border-radius:18px; display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:900; color:#fff; flex-shrink:0; position:relative; box-shadow:0 6px 20px rgba(0,0,0,.2); }
+.avatar-status { position:absolute; bottom:-3px; right:-3px; width:16px; height:16px; border-radius:50%; border:3px solid var(--card-bg); }
+.user-info { flex:1; min-width:0; }
+.user-name { font-size:16px; font-weight:800; color:var(--text-primary); margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.user-email { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:12px; }
+.role-badge { display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:30px; font-size:11px; font-weight:800; letter-spacing:.3px; }
+.inactive-badge { display:inline-flex; align-items:center; gap:4px; padding:4px 10px; border-radius:20px; font-size:10px; font-weight:700; background:rgba(156,163,175,.15); color:#9ca3af; }
+.card-divider { height:1px; background:var(--border-color); margin:0 20px; }
+.card-stats { display:grid; grid-template-columns:1fr 1fr; }
+.stat-cell { padding:14px 20px; display:flex; flex-direction:column; gap:3px; }
+.stat-cell:first-child { border-right:1px solid var(--border-color); }
+.stat-label-sm { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--text-muted); }
+.stat-value-sm { font-size:13px; font-weight:700; color:var(--text-primary); }
+.card-branches-section { padding:14px 20px 18px; border-top:1px solid var(--border-color); }
+.branches-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--text-muted); margin-bottom:10px; display:flex; align-items:center; gap:5px; }
+.branches-list { display:flex; flex-wrap:wrap; gap:7px; }
+.branch-tag { display:inline-flex; align-items:center; gap:5px; padding:5px 11px; border-radius:30px; font-size:11px; font-weight:700; border:1.5px solid; }
+.no-branch { font-size:12px; color:var(--text-muted); font-style:italic; }
+.card-actions-row { padding:14px 20px; border-top:1px solid var(--border-color); display:flex; gap:8px; }
+.action-btn { flex:1; padding:8px 10px; border-radius:10px; border:1.5px solid var(--border-color); background:transparent; color:var(--text-muted); font-size:11px; font-weight:700; cursor:pointer; transition:all .15s; display:flex; align-items:center; justify-content:center; gap:5px; font-family:inherit; }
+.action-btn:hover { background:var(--bg-secondary); color:var(--text-primary); border-color:var(--text-muted); }
+.action-btn.danger:hover { border-color:#ef4444; color:#ef4444; background:#ef444410; }
+.action-btn.success:hover { border-color:#22c55e; color:#22c55e; background:#22c55e10; }
+.kebab-btn { position:absolute; top:16px; right:16px; width:32px; height:32px; border-radius:8px; border:1.5px solid var(--border-color); background:var(--card-bg); color:var(--text-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:13px; transition:all .15s; z-index:10; }
+.kebab-btn:hover { background:var(--bg-secondary); color:var(--text-primary); }
+.dropdown-menu { display:none; position:absolute; top:52px; right:16px; background:var(--card-bg); border:1px solid var(--border-color); border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,.15); min-width:190px; z-index:200; overflow:hidden; }
+.dropdown-item { display:flex; align-items:center; gap:10px; width:100%; padding:11px 16px; border:none; background:transparent; color:var(--text-primary); font-size:13px; font-weight:600; cursor:pointer; text-align:right; font-family:inherit; transition:background .1s; }
+.dropdown-item:hover { background:var(--bg-secondary); }
+.dropdown-item i { width:16px; font-size:13px; color:var(--text-muted); }
+.dropdown-sep { height:1px; background:var(--border-color); margin:4px 0; }
+.role-tabs { display:flex; gap:8px; flex-wrap:wrap; }
+.role-tab { padding:8px 18px; border-radius:30px; border:2px solid var(--border-color); background:transparent; color:var(--text-muted); cursor:pointer; font-size:12px; font-weight:700; transition:all .2s; font-family:inherit; display:flex; align-items:center; gap:7px; }
+.role-tab .cnt { background:rgba(0,0,0,.1); padding:1px 7px; border-radius:10px; font-size:10px; }
+.role-tab.active { color:#fff; border-color:transparent; }
+.branch-checkgrid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.branch-check-item { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; cursor:pointer; border:2px solid var(--border-color); transition:all .15s; user-select:none; }
+.branch-check-item.selected { border-color:var(--primary); background:var(--primary-light); }
+.branch-check-item input { display:none; }
+.menu-item { display:flex; align-items:center; gap:10px; width:100%; padding:11px 16px; border:none; background:transparent; color:var(--text-primary); font-size:13px; cursor:pointer; text-align:right; font-family:inherit; transition:background .1s; font-weight:600; }
+.menu-item:hover { background:var(--bg-secondary); }
+.menu-item i { width:16px; font-size:13px; color:var(--text-muted); }
+.users-list { display:flex; flex-direction:column; gap:10px; }
+.users-list .user-card { border-radius:14px; }
+</style>
+
+<!-- PAGE HEADER -->
+<div class="page-header">
+    <div>
+        <h1 class="page-title"><i class="fas fa-users me-2" style="color:var(--primary)"></i>إدارة المستخدمين</h1>
+        <p class="page-subtitle">@Model.Count() مستخدم · @Model.Count(m => m.User.IsActive) نشط · @branches.Count فرع</p>
+    </div>
+    <button class="btn btn-primary" onclick="Modal.open('addUserModal')">
+        <i class="fas fa-user-plus me-2"></i>إضافة مستخدم
+    </button>
+</div>
+
+<!-- ROLE STAT CARDS -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:14px;margin-bottom:28px">
+    <div class="card" style="padding:18px;text-align:center;border-top:4px solid #6b7280;cursor:pointer" onclick="filterByRoleTab('',null)">
+        <div style="font-size:28px;font-weight:900;color:var(--text-primary);line-height:1">@Model.Count()</div>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text-muted);margin-top:5px">الكل</div>
+        <div style="font-size:11px;color:#22c55e;font-weight:600;margin-top:4px">@Model.Count(m => m.User.IsActive) نشط</div>
+    </div>
+    @foreach (var (roleName,(color,gradient,icon,emoji,desc)) in roleConfig)
+    {
+        var cnt = Model.Count(m => m.Roles.Contains(roleName));
+        <div class="card" style="padding:18px;text-align:center;border-top:4px solid @color;cursor:pointer;transition:transform .2s"
+             onclick="filterByRoleTab('@roleName',null)"
+             onmouseenter="this.style.transform='translateY(-2px)'" onmouseleave="this.style.transform=''">
+            <div style="font-size:22px;margin-bottom:6px">@emoji</div>
+            <div style="font-size:26px;font-weight:900;color:@color;line-height:1">@cnt</div>
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text-muted);margin-top:5px">@roleName</div>
+        </div>
+    }
+</div>
+
+<!-- TOOLBAR -->
+<div style="display:flex;gap:10px;align-items:center;margin-bottom:20px;flex-wrap:wrap">
+    <div style="position:relative;flex:1;min-width:240px">
+        <i class="fas fa-search" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:13px"></i>
+        <input type="text" id="searchInput" placeholder="بحث بالاسم أو البريد أو الدور..."
+               class="form-control" style="padding-left:40px;border-radius:30px;height:42px"
+               oninput="applyFilters()">
+    </div>
+    <select id="branchFilter" class="form-control" style="max-width:190px;height:42px;border-radius:30px" onchange="applyFilters()">
+        <option value="">كل الفروع</option>
+        @foreach (var b in branches) { <option value="@b.Id">@b.Icon @(!string.IsNullOrEmpty(b.NameAr) ? b.NameAr : b.Name)</option> }
+    </select>
+    <select id="statusFilter" class="form-control" style="max-width:150px;height:42px;border-radius:30px" onchange="applyFilters()">
+        <option value="">كل الحالات</option>
+        <option value="active">✅ نشط</option>
+        <option value="inactive">⛔ غير نشط</option>
+    </select>
+
+</div>
+
+<!-- ROLE FILTER TABS -->
+<div class="role-tabs" style="margin-bottom:24px">
+    <button class="role-tab active" data-role="" onclick="filterByRoleTab('',this)" style="background:var(--text-muted);border-color:transparent;color:#fff">
+        الكل <span class="cnt">@Model.Count()</span>
+    </button>
+    @foreach (var (roleName,(color,gradient,icon,emoji,desc)) in roleConfig)
+    {
+        var cnt = Model.Count(m => m.Roles.Contains(roleName));
+        <button class="role-tab" data-role="@roleName" onclick="filterByRoleTab('@roleName',this)" style="--rc:@color">
+            @emoji @roleName <span class="cnt">@cnt</span>
+        </button>
+    }
+</div>
+
+<!-- USERS GRID -->
+<div class="users-list" id="usersGrid">
+    @foreach (var (user, userRoles, userBranches) in Model)
+    {
+        var mainRole = userRoles.FirstOrDefault() ?? "None";
+        var isActive = user.IsActive;
+        var rCfg     = roleConfig.GetValueOrDefault(mainRole, ("#6b7280","135deg,#6b7280,#4b5563","fa-user","👤","مستخدم"));
+        var roleColor    = rCfg.Item1;
+        var roleGradient = rCfg.Item2;
+        var roleIcon     = rCfg.Item3;
+        var roleEmoji    = rCfg.Item4;
+        var displayName  = !string.IsNullOrEmpty(user.FullNameAr) ? user.FullNameAr
+                         : !string.IsNullOrEmpty(user.FullName)   ? user.FullName
+                         : user.UserName ?? "—";
+        var initials = displayName.Length > 0 ? displayName[0].ToString().ToUpper() : "?";
+        var branchIds   = string.Join(",", userBranches.Select(b => b?.Id));
+        var pillStyle   = $"background:{roleColor}18;color:{roleColor};border:1.5px solid {roleColor}40";
+        var stripeStyle = $"background:linear-gradient({roleGradient})";
+        var avatarStyle = $"background:linear-gradient({roleGradient})";
+
+        <div class="user-card @(!isActive ? "inactive" : "")"
+             data-role="@mainRole"
+             data-status="@(isActive ? "active" : "inactive")"
+             data-branches="@branchIds"
+             data-name="@user.FullNameAr @user.FullName @user.Email">
+
+            <div class="card-stripe" style="@stripeStyle"></div>
+            <div class="card-hero">
+                <div class="user-avatar" style="@avatarStyle">
+                    @initials
+                    <div class="avatar-status" style="background:@(isActive ? "#22c55e" : "#9ca3af")"></div>
+                </div>
+                <div class="user-info">
+                    <div class="user-name">@displayName</div>
+                    <div class="user-email">
+                        <i class="fas fa-at" style="color:@roleColor;font-size:11px"></i>
+                        @user.Email
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                        <span class="role-badge" style="@pillStyle">
+                            <i class="fas @roleIcon" style="font-size:10px"></i>
+                            @mainRole
+                        </span>
+                        @if (!isActive)
+                        {
+                            <span class="inactive-badge"><i class="fas fa-ban" style="font-size:9px"></i> غير نشط</span>
+                        }
+                    </div>
+                </div>
+                <button class="kebab-btn" onclick="toggleMenu('@user.Id')">
+                    <i class="fas fa-ellipsis-v"></i>
+                </button>
+                <div class="dropdown-menu" id="menu-@user.Id">
+                    <button class="menu-item" onclick="editUser('@user.Id','@(user.FullNameAr ?? "")','@user.Email','@mainRole'); closeMenus()">
+                        <i class="fas fa-pen-to-square"></i> تعديل البيانات
+                    </button>
+                    <button class="menu-item" onclick="manageBranches('@user.Id','@displayName','@branchIds',@(user.DefaultBranchId?.ToString() ?? "null")); closeMenus()">
+                        <i class="fas fa-code-branch"></i> إدارة الفروع
+                    </button>
+                    <button class="menu-item" onclick="resetPassword('@user.Id','@displayName','@user.Email'); closeMenus()">
+                        <i class="fas fa-key"></i> إعادة تعيين كلمة المرور
+                    </button>
+                    <div class="dropdown-sep"></div>
+                    <button class="menu-item" style="color:#ef4444" onclick="deleteUser('@user.Id','@displayName'); closeMenus()">
+                        <i class="fas fa-trash"></i> حذف المستخدم نهائياً
+                    </button>
+                    <div class="dropdown-sep"></div>
+                    <button class="menu-item" style="color:@(isActive ? "#ef4444" : "#22c55e")"
+                            onclick="toggleUser('@user.Id',@(isActive ? "true" : "false")); closeMenus()">
+                        <i class="fas fa-@(isActive ? "ban" : "circle-check")"></i>
+                        @(isActive ? "تعطيل" : "تفعيل")
+                    </button>
+                </div>
+            </div>
+
+            <div class="card-stats">
+                <div class="stat-cell">
+                    <div class="stat-label-sm"><i class="fas fa-calendar-alt me-1"></i>تاريخ الانضمام</div>
+                    <div class="stat-value-sm">@user.CreatedAt.ToString("MMM yyyy")</div>
+                </div>
+                <div class="stat-cell">
+                    <div class="stat-label-sm"><i class="fas fa-envelope me-1"></i>البريد الإلكتروني</div>
+                    <div class="stat-value-sm" style="color:@(user.EmailConfirmed ? "#22c55e" : "#f59e0b")">
+                        @(user.EmailConfirmed ? "✓ مؤكد" : "⚠ معلق")
+                    </div>
+                </div>
+            </div>
+
+            <div class="card-branches-section">
+                <div class="branches-label">
+                    <i class="fas fa-code-branch" style="color:@roleColor"></i>
+                    صلاحية الفروع (@userBranches.Count(b => b != null))
+                </div>
+                <div class="branches-list">
+                    @if (!userBranches.Any(b => b != null))
+                    {
+                        <span class="no-branch"><i class="fas fa-exclamation-circle me-1" style="color:#f59e0b"></i>لا يوجد فرع محدد</span>
+                    }
+                    else
+                    {
+                        @foreach (var b in userBranches.Where(b => b != null).Take(4))
+                        {
+                            var isPrimary = b!.Id == user.DefaultBranchId;
+                            var tagStyle  = isPrimary
+                                ? $"background:{b.ColorHex}15;border-color:{b.ColorHex};color:{b.ColorHex}"
+                                : "background:var(--bg-secondary);border-color:var(--border-color);color:var(--text-muted)";
+                            <span class="branch-tag" style="@tagStyle">
+                                <span style="font-size:13px">@b.Icon</span>
+                                <span>@(!string.IsNullOrEmpty(b!.NameAr) ? b.NameAr : b.Name)</span>
+                                @if (isPrimary) { <span style="background:@(b.ColorHex)25;padding:1px 5px;border-radius:10px;font-size:9px">★</span> }
+                            </span>
+                        }
+                        @if (userBranches.Count(b => b != null) > 4)
+                        {
+                            <span class="branch-tag" style="background:var(--bg-secondary);border-color:var(--border-color);color:var(--text-muted)">+@(userBranches.Count(b => b != null) - 4) أخرى</span>
+                        }
+                    }
+                </div>
+            </div>
+
+            <div class="card-actions-row">
+                <button class="action-btn" onclick="editUser('@user.Id','@(user.FullNameAr ?? "")','@user.Email','@mainRole')">
+                    <i class="fas fa-pen-to-square"></i> تعديل
+                </button>
+                <button class="action-btn" onclick="manageBranches('@user.Id','@displayName','@branchIds',@(user.DefaultBranchId?.ToString() ?? "null"))">
+                    <i class="fas fa-code-branch"></i> الفروع
+                </button>
+                <button class="action-btn @(isActive ? "danger" : "success")" onclick="toggleUser('@user.Id',@(isActive ? "true" : "false"))">
+                    <i class="fas fa-@(isActive ? "ban" : "circle-check")"></i>
+                    @(isActive ? "تعطيل" : "تفعيل")
+                </button>
+                <button class="action-btn" onclick="deleteUser('@user.Id','@displayName.Replace("'","\'")')"
+                        style="flex:0;padding:8px 14px;border-color:#ef4444;color:#ef4444" title="حذف نهائياً">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+<div id="emptyState" style="display:none;text-align:center;padding:100px 40px;color:var(--text-muted)">
+    <i class="fas fa-users-slash fa-3x" style="opacity:.12;margin-bottom:20px;display:block"></i>
+    <div style="font-size:18px;font-weight:700;margin-bottom:8px">لا يوجد مستخدمون</div>
+    <div style="font-size:13px">جرب تعديل معايير البحث أو الفلاتر</div>
+</div>
+
+<!-- ════ MODALS ════ -->
+
+<!-- إضافة مستخدم -->
+<div class="modal-overlay" id="addUserModal">
+    <div class="modal" style="max-width:560px">
+        <div class="modal-header">
+            <h3 class="modal-title"><i class="fas fa-user-plus me-2" style="color:var(--primary)"></i>إضافة مستخدم جديد</h3>
+            <button class="modal-close" onclick="Modal.close('addUserModal')">&times;</button>
+        </div>
+        <div class="modal-body" style="padding:24px">
+
+            <!-- الاسم بالعربي فقط -->
+            <div class="form-group" style="margin-bottom:16px">
+                <label class="form-label" style="font-weight:700">الاسم الكامل <span style="color:var(--danger)">*</span></label>
+                <input type="text" id="newFullNameAr" class="form-control" dir="rtl" placeholder="أحمد علي" style="height:44px;border-radius:10px">
+            </div>
+
+            <div class="form-group" style="margin-bottom:16px">
+                <label class="form-label" style="font-weight:700">البريد الإلكتروني <span style="color:var(--danger)">*</span></label>
+                <input type="email" id="newEmail" class="form-control" placeholder="user@restaurant.com" style="height:44px;border-radius:10px">
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+                <div class="form-group">
+                    <label class="form-label" style="font-weight:700">كلمة المرور <span style="color:var(--danger)">*</span></label>
+                    <div style="position:relative">
+                        <input type="password" id="newPassword" class="form-control" placeholder="6 أحرف على الأقل" style="height:44px;border-radius:10px;padding-right:44px">
+                        <button type="button" onclick="togglePwd('newPassword',this)" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" style="font-weight:700">الدور <span style="color:var(--danger)">*</span></label>
+                    <select id="newRole" class="form-control" style="height:44px;border-radius:10px" onchange="updateRolePreview(this.value)">
+                        @foreach (var r in roles) { <option value="@r">@r</option> }
+                    </select>
+                </div>
+            </div>
+
+            <!-- معاينة الدور -->
+            <div id="rolePreview" style="display:flex;align-items:center;gap:14px;padding:14px 18px;background:var(--bg-secondary);border-radius:14px;margin-bottom:20px;border:1px solid var(--border-color)">
+                <span id="rolePreviewEmoji" style="font-size:28px">👑</span>
+                <div>
+                    <div id="rolePreviewName" style="font-weight:800;font-size:15px">Admin</div>
+                    <div id="rolePreviewDesc" style="font-size:12px;color:var(--text-muted);margin-top:2px">صلاحية كاملة على النظام</div>
+                </div>
+                <span id="rolePreviewBadge" style="margin-left:auto;padding:5px 14px;border-radius:20px;font-size:11px;font-weight:800;background:#ef444418;color:#ef4444">Admin</span>
+            </div>
+
+            <!-- الفروع -->
+            <div class="form-group">
+                <label class="form-label" style="font-weight:700;display:flex;align-items:center;gap:7px;margin-bottom:12px">
+                    <i class="fas fa-code-branch" style="color:var(--primary)"></i>
+                    تحديد الفروع
+                    <span style="font-size:11px;color:var(--text-muted);font-weight:400">(اختر كل ما ينطبق)</span>
+                </label>
+                <div class="branch-checkgrid">
+                    @foreach (var b in branches)
+                    {
+                        <label class="branch-check-item" id="nb-@b.Id" onclick="toggleBranchCheck('new',@b.Id)">
+                            <input type="checkbox" value="@b.Id" class="newBranchCheck">
+                            <span style="font-size:22px">@b.Icon</span>
+                            <div style="flex:1;min-width:0">
+                                <div style="font-size:13px;font-weight:700">@b.Name</div>
+                                <div style="font-size:11px;color:var(--text-muted)">@b.NameAr</div>
+                            </div>
+                            <div style="width:10px;height:10px;border-radius:50%;background:@b.ColorHex;flex-shrink:0"></div>
+                        </label>
+                    }
+                </div>
+                <div style="margin-top:14px;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text-muted)">
+                    <i class="fas fa-star" style="color:#f59e0b"></i>
+                    <span style="font-weight:700">الفرع الأساسي:</span>
+                    <select id="newPrimaryBranch" class="form-control" style="flex:1;height:38px;border-radius:10px">
+                        <option value="">— اختر الفرع الأساسي —</option>
+                        @foreach (var b in branches) { <option value="@b.Id">@b.Icon @(!string.IsNullOrEmpty(b.NameAr) ? b.NameAr : b.Name)</option> }
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer" style="padding:16px 24px">
+            <button class="btn btn-outline" onclick="Modal.close('addUserModal')">إلغاء</button>
+            <button class="btn btn-primary" id="createUserBtn" onclick="createUser()" style="min-width:140px">
+                <i class="fas fa-user-plus me-2"></i>إنشاء المستخدم
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- تعديل مستخدم -->
+<div class="modal-overlay" id="editUserModal">
+    <div class="modal" style="max-width:440px">
+        <div class="modal-header">
+            <h3 class="modal-title"><i class="fas fa-user-edit me-2" style="color:var(--primary)"></i>تعديل المستخدم</h3>
+            <button class="modal-close" onclick="Modal.close('editUserModal')">&times;</button>
+        </div>
+        <div class="modal-body" style="padding:24px">
+            <input type="hidden" id="editUserId">
+            <div class="form-group" style="margin-bottom:14px">
+                <label class="form-label" style="font-weight:700">الاسم الكامل</label>
+                <input type="text" id="editFullNameAr" class="form-control" dir="rtl" style="height:44px;border-radius:10px">
+            </div>
+            <div class="form-group" style="margin-bottom:14px">
+                <label class="form-label" style="font-weight:700">البريد الإلكتروني</label>
+                <input type="email" id="editEmail" class="form-control" style="height:44px;border-radius:10px">
+            </div>
+            <div class="form-group">
+                <label class="form-label" style="font-weight:700">الدور</label>
+                <select id="editRole" class="form-control" style="height:44px;border-radius:10px">
+                    @foreach (var r in roles) { <option value="@r">@r</option> }
+                </select>
+            </div>
+        </div>
+        <div class="modal-footer" style="padding:16px 24px">
+            <button class="btn btn-outline" onclick="Modal.close('editUserModal')">إلغاء</button>
+            <button class="btn btn-primary" onclick="submitEditUser()" style="min-width:130px">
+                <i class="fas fa-save me-2"></i>حفظ التغييرات
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- إدارة الفروع -->
+<div class="modal-overlay" id="branchesModal">
+    <div class="modal" style="max-width:540px">
+        <div class="modal-header">
+            <h3 class="modal-title">
+                <i class="fas fa-code-branch me-2" style="color:var(--primary)"></i>
+                صلاحية الفروع — <span id="branchModalUser" style="color:var(--primary)"></span>
+            </h3>
+            <button class="modal-close" onclick="Modal.close('branchesModal')">&times;</button>
+        </div>
+        <div class="modal-body" style="padding:24px">
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:18px;line-height:1.6">
+                <i class="fas fa-info-circle me-1" style="color:var(--primary)"></i>
+                حدد الفروع التي يمكن لهذا المستخدم الوصول إليها. الفرع الأساسي هو الافتراضي عند تسجيل الدخول.
+            </p>
+            <div class="branch-checkgrid" id="editBranchGrid">
+                @foreach (var b in branches)
+                {
+                    <label class="branch-check-item" id="eb-@b.Id" onclick="toggleBranchCheck('edit',@b.Id)">
+                        <input type="checkbox" value="@b.Id" class="editBranchCheck">
+                        <span style="font-size:22px">@b.Icon</span>
+                        <div style="flex:1;min-width:0">
+                            <div style="font-size:13px;font-weight:700">@b.Name</div>
+                            <div style="font-size:11px;color:var(--text-muted)">@b.NameAr</div>
+                        </div>
+                        <div style="width:12px;height:12px;border-radius:50%;background:@b.ColorHex;flex-shrink:0"></div>
+                    </label>
+                }
+            </div>
+            <div style="margin-top:18px;padding:16px;background:var(--bg-secondary);border-radius:12px;border:1px solid var(--border-color)">
+                <label style="font-size:12px;font-weight:800;color:var(--text-muted);display:flex;align-items:center;gap:6px;margin-bottom:10px">
+                    <i class="fas fa-star" style="color:#f59e0b"></i> الفرع الأساسي (افتراضي عند الدخول)
+                </label>
+                <select id="editPrimaryBranch" class="form-control" style="height:42px;border-radius:10px">
+                    <option value="">— بدون —</option>
+                    @foreach (var b in branches) { <option value="@b.Id">@b.Icon @(!string.IsNullOrEmpty(b.NameAr) ? b.NameAr : b.Name)</option> }
+                </select>
+            </div>
+            <input type="hidden" id="branchUserId">
+        </div>
+        <div class="modal-footer" style="padding:16px 24px">
+            <button class="btn btn-outline" onclick="Modal.close('branchesModal')">إلغاء</button>
+            <button class="btn btn-primary" onclick="submitBranches()" style="min-width:170px">
+                <i class="fas fa-save me-2"></i>حفظ الفروع
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- إعادة تعيين كلمة المرور -->
+<div class="modal-overlay" id="resetPwdModal">
+    <div class="modal" style="max-width:420px">
+        <div class="modal-header">
+            <h3 class="modal-title"><i class="fas fa-key me-2" style="color:#f59e0b"></i>إعادة تعيين كلمة المرور</h3>
+            <button class="modal-close" onclick="Modal.close('resetPwdModal')">&times;</button>
+        </div>
+        <div class="modal-body" style="padding:24px">
+            <div id="resetUserInfo" style="display:flex;align-items:center;gap:14px;padding:16px;background:var(--bg-secondary);border-radius:14px;margin-bottom:20px;border:1px solid var(--border-color)">
+                <div id="resetUserAvatar" style="width:48px;height:48px;border-radius:14px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;flex-shrink:0">?</div>
+                <div>
+                    <div id="resetUserName" style="font-weight:800;font-size:14px"></div>
+                    <div id="resetUserEmail" style="font-size:12px;color:var(--text-muted);margin-top:2px"></div>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label" style="font-weight:700">كلمة المرور الجديدة</label>
+                <div style="position:relative">
+                    <input type="password" id="resetNewPwd" class="form-control" placeholder="6 أحرف على الأقل" style="height:44px;border-radius:10px;padding-right:44px">
+                    <button type="button" onclick="togglePwd('resetNewPwd',this)" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </div>
+            </div>
+            <input type="hidden" id="resetUserId">
+        </div>
+        <div class="modal-footer" style="padding:16px 24px">
+            <button class="btn btn-outline" onclick="Modal.close('resetPwdModal')">إلغاء</button>
+            <button class="btn btn-warning" onclick="submitResetPassword()" style="background:#f59e0b;border-color:#f59e0b;color:#fff;min-width:160px">
+                <i class="fas fa-key me-2"></i>إعادة تعيين
+            </button>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+const roleInfo = {
+    Admin:   { emoji:'👑', color:'#ef4444', desc:'صلاحية كاملة على النظام' },
+    Manager: { emoji:'🎯', color:'#8b5cf6', desc:'إدارة العمليات والتقارير' },
+    Cashier: { emoji:'💰', color:'#2563a8', desc:'نقطة البيع والطاولات والطلبات' },
+    Kitchen: { emoji:'👨‍🍳', color:'#f59e0b', desc:'شاشة المطبخ وحالة الطلبات' },
+    'محصل':  { emoji:'📋', color:'#0891b2', desc:'عرض المنتجات فقط' },
+};
+const branches = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+    (ViewBag.Branches as List<RestaurantERP.Models.Branch> ?? new()).Select(b => new {
+        id=b.Id, name=b.Name, nameAr=b.NameAr, icon=b.Icon, colorHex=b.ColorHex
+    })));
+
+let activeRoleFilter = '';
+
+function applyFilters() {
+    const q      = document.getElementById('searchInput').value.toLowerCase();
+    const branch = document.getElementById('branchFilter').value;
+    const status = document.getElementById('statusFilter').value;
+    let visible  = 0;
+    document.querySelectorAll('.user-card').forEach(card => {
+        const ok = (!activeRoleFilter || card.dataset.role === activeRoleFilter)
+                && (!q      || (card.dataset.name||'').toLowerCase().includes(q) || card.textContent.toLowerCase().includes(q))
+                && (!status || card.dataset.status === status)
+                && (!branch || (card.dataset.branches||'').split(',').includes(branch));
+        card.style.display = ok ? '' : 'none';
+        if (ok) visible++;
+    });
+    document.getElementById('emptyState').style.display = visible ? 'none' : '';
+}
+
+function filterByRoleTab(role, btn) {
+    activeRoleFilter = role;
+    document.querySelectorAll('.role-tab').forEach(t => {
+        t.classList.remove('active');
+        t.style.background = t.style.color = t.style.borderColor = '';
+    });
+    const target = btn || document.querySelector(`.role-tab[data-role="${role}"]`);
+    if (target) {
+        target.classList.add('active');
+        const c = target.style.getPropertyValue('--rc') || 'var(--text-muted)';
+        target.style.background  = c;
+        target.style.color       = '#fff';
+        target.style.borderColor = 'transparent';
+    }
+    applyFilters();
+}
+
+
+function toggleMenu(id) {
+    closeMenus();
+    const m = document.getElementById('menu-'+id);
+    if (m) m.style.display = m.style.display === 'none' ? '' : 'none';
+}
+function closeMenus() { document.querySelectorAll('.dropdown-menu').forEach(m => m.style.display = 'none'); }
+document.addEventListener('click', e => { if (!e.target.closest('.dropdown-menu') && !e.target.closest('.kebab-btn')) closeMenus(); });
+
+function updateRolePreview(role) {
+    const info = roleInfo[role] || { emoji:'👤', color:'#6b7280', desc:'صلاحية المستخدم' };
+    document.getElementById('rolePreviewEmoji').textContent = info.emoji;
+    document.getElementById('rolePreviewName').textContent  = role;
+    document.getElementById('rolePreviewDesc').textContent  = info.desc;
+    const badge = document.getElementById('rolePreviewBadge');
+    if (badge) { badge.textContent = role; badge.style.background = info.color+'20'; badge.style.color = info.color; }
+}
+document.addEventListener('DOMContentLoaded', () => {
+    const sel = document.getElementById('newRole');
+    if (sel) updateRolePreview(sel.value);
+});
+
+function toggleBranchCheck(prefix, id) {
+    const el  = document.getElementById(`${prefix === 'new' ? 'nb' : 'eb'}-${id}`);
+    const chk = el?.querySelector('input[type=checkbox]');
+    if (!chk) return;
+    chk.checked = !chk.checked;
+    el.classList.toggle('selected', chk.checked);
+}
+
+function togglePwd(inputId, btn) {
+    const inp = document.getElementById(inputId);
+    if (!inp) return;
+    inp.type = inp.type === 'text' ? 'password' : 'text';
+    btn.innerHTML = `<i class="fas fa-eye${inp.type === 'text' ? '-slash' : ''}"></i>`;
+}
+
+async function createUser() {
+    const btn = document.getElementById('createUserBtn');
+    const nameAr   = document.getElementById('newFullNameAr').value.trim();
+    const branchIds = [...document.querySelectorAll('.newBranchCheck:checked')].map(c => parseInt(c.value));
+    const primaryId = parseInt(document.getElementById('newPrimaryBranch').value) || null;
+    const payload = {
+        fullName:       nameAr,
+        fullNameAr:     nameAr,
+        email:          document.getElementById('newEmail').value,
+        password:       document.getElementById('newPassword').value,
+        role:           document.getElementById('newRole').value,
+        branchIds, primaryBranchId: primaryId
+    };
+    if (!payload.email || !payload.password) { Toast.warning('البريد الإلكتروني وكلمة المرور مطلوبان'); return; }
+    if (payload.password.length < 6) { Toast.warning('كلمة المرور يجب أن تكون 6 أحرف على الأقل'); return; }
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>جاري الإنشاء...';
+    try {
+        const res = await API.post('/Admin/CreateUser', payload);
+        if (res.success) { Toast.success('تم إنشاء المستخدم!'); setTimeout(() => location.reload(), 700); }
+        else Toast.error(res.message || 'فشل الإنشاء');
+    } catch(e) { Toast.error('حدث خطأ أثناء الإنشاء'); }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-user-plus me-2"></i>إنشاء المستخدم';
+}
+
+function editUser(id, fullNameAr, email, role) {
+    document.getElementById('editUserId').value      = id;
+    document.getElementById('editFullNameAr').value  = fullNameAr;
+    document.getElementById('editEmail').value       = email;
+    document.getElementById('editRole').value        = role;
+    Modal.open('editUserModal');
+}
+async function submitEditUser() {
+    const nameAr = document.getElementById('editFullNameAr').value.trim();
+    const res = await API.post('/Admin/EditUser', {
+        userId:     document.getElementById('editUserId').value,
+        fullName:   nameAr,
+        fullNameAr: nameAr,
+        email:      document.getElementById('editEmail').value,
+        role:       document.getElementById('editRole').value,
+    });
+    if (res.success) { Toast.success('تم تحديث المستخدم'); setTimeout(() => location.reload(), 700); }
+    else Toast.error(res.message || 'فشل التحديث');
+}
+
+function manageBranches(userId, userName, branchIdsCsv, primaryBranchId) {
+    document.getElementById('branchUserId').value = userId;
+    document.getElementById('branchModalUser').textContent = userName;
+    const assignedIds = branchIdsCsv ? branchIdsCsv.split(',').map(Number).filter(Boolean) : [];
+    document.querySelectorAll('.editBranchCheck').forEach(chk => {
+        chk.checked = false;
+        document.getElementById('eb-'+chk.value)?.classList.remove('selected');
+    });
+    assignedIds.forEach(bid => {
+        const chk = document.querySelector(`.editBranchCheck[value="${bid}"]`);
+        if (chk) { chk.checked = true; document.getElementById('eb-'+bid)?.classList.add('selected'); }
+    });
+    document.getElementById('editPrimaryBranch').value = primaryBranchId || '';
+    Modal.open('branchesModal');
+}
+async function submitBranches() {
+    const userId    = document.getElementById('branchUserId').value;
+    const branchIds = [...document.querySelectorAll('.editBranchCheck:checked')].map(c => parseInt(c.value));
+    const primaryId = parseInt(document.getElementById('editPrimaryBranch').value) || null;
+    const res = await API.post('/Admin/UpdateUserBranches', { userId, branchIds, primaryBranchId: primaryId });
+    if (res.success) { Toast.success('تم تحديث الفروع!'); setTimeout(() => location.reload(), 700); }
+    else Toast.error(res.message || 'فشل التحديث');
+}
+
+async function toggleUser(id, currentlyActive) {
+    const action = currentlyActive === 'true' ? 'تعطيل' : 'تفعيل';
+    if (!confirm(`هل تريد ${action} هذا المستخدم؟`)) return;
+    const res = await API.post('/Admin/ToggleUser', { userId: id });
+    if (res.success) { Toast.success(`تم ${action} المستخدم`); setTimeout(() => location.reload(), 700); }
+    else Toast.error(res.message || 'فشل');
+}
+
+function resetPassword(id, name, email) {
+    document.getElementById('resetUserId').value = id;
+    document.getElementById('resetUserName').textContent  = name || email;
+    document.getElementById('resetUserEmail').textContent = email;
+    document.getElementById('resetUserAvatar').textContent = (name || email || '?')[0].toUpperCase();
+    document.getElementById('resetNewPwd').value = '';
+    Modal.open('resetPwdModal');
+}
+async function deleteUser(id, name) {
+    if (!confirm('⚠️ تحذير: هل أنت متأكد من حذف المستخدم "' + name + '" نهائياً؟\n\nهذا الإجراء لا يمكن التراجع عنه.')) return;
+    try {
+        const res = await API.post('/Admin/DeleteUser', { id });
+        if (res.success) {
+            Toast.success('تم حذف المستخدم بنجاح');
+            // Remove card from DOM
+            const card = document.querySelector(`[data-name*="${name.substring(0,5)}"]`);
+            if (card) { card.style.animation='fadeOut 0.3s'; setTimeout(() => card.remove(), 300); }
+            else setTimeout(() => location.reload(), 700);
+        } else {
+            Toast.error(res.message || 'فشل حذف المستخدم');
+        }
+    } catch(e) { Toast.error('حدث خطأ'); }
+}
+
+async function submitResetPassword() {
+    const pwd = document.getElementById('resetNewPwd').value;
+    if (!pwd || pwd.length < 6) { Toast.warning('كلمة المرور يجب أن تكون 6 أحرف على الأقل'); return; }
+    const res = await API.post('/Admin/ResetUserPassword', { userId: document.getElementById('resetUserId').value, newPassword: pwd });
+    if (res.success) { Toast.success('تم إعادة تعيين كلمة المرور!'); Modal.close('resetPwdModal'); }
+    else Toast.error(res.message || 'فشل');
+}
+</script>
+}

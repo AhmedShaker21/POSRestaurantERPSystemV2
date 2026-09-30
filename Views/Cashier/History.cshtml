@@ -1,0 +1,251 @@
+@model IEnumerable<RestaurantERP.Models.Order>
+@{
+    ViewData["Title"] = "سجل الطلبات";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">سجل الطلبات</h1>
+        <p class="page-subtitle">طلبات وردية اليوم</p>
+    </div>
+    <div class="d-flex gap-2">
+        <span class="badge badge-success">@Model.Count() طلب</span>
+        <span class="badge badge-primary">@Model.Where(o => o.Status == RestaurantERP.Models.OrderStatus.Completed).Sum(o => o.Total).ToString("F2") ج.م</span>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+            <div style="position:relative">
+                <i class="fas fa-search" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:13px"></i>
+                <input type="text" id="searchInput" class="form-control" style="max-width:250px;padding-right:36px"
+                       placeholder="بحث في الطلبات..." oninput="filterTable()">
+            </div>
+            <select id="statusFilter" class="form-control" style="max-width:160px" onchange="filterTable()">
+                <option value="">كل الحالات</option>
+                <option value="Pending">معلق</option>
+                <option value="Preparing">قيد التحضير</option>
+                <option value="Ready">جاهز</option>
+                <option value="Completed">مكتمل</option>
+                <option value="Cancelled">ملغي</option>
+            </select>
+            <select id="typeFilter" class="form-control" style="max-width:160px" onchange="filterTable()">
+                <option value="">كل الأنواع</option>
+                <option value="DineIn">صالة</option>
+                <option value="Takeaway">تيك أواي</option>
+                <option value="Delivery">توصيل</option>
+            </select>
+        </div>
+    </div>
+    <div class="table-container">
+        <table class="data-table" id="ordersTable">
+            <thead>
+                <tr>
+                    <th>رقم الطلب</th>
+                    <th>النوع</th>
+                    <th>الأصناف</th>
+                    <th>الإجمالي</th>
+                    <th>طريقة الدفع</th>
+                    <th>الحالة</th>
+                    <th>الوقت</th>
+                    <th>الإجراءات</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var order in Model.OrderByDescending(o => o.CreatedAt))
+                {
+                    var typeAr = order.OrderType == RestaurantERP.Models.OrderType.DineIn ? "صالة"
+                                 : order.OrderType == RestaurantERP.Models.OrderType.Takeaway ? "تيك أواي" : "توصيل";
+                    var statusAr = order.Status == RestaurantERP.Models.OrderStatus.Completed ? "مكتمل"
+                                 : order.Status == RestaurantERP.Models.OrderStatus.Cancelled ? "ملغي"
+                                 : order.Status == RestaurantERP.Models.OrderStatus.Preparing ? "قيد التحضير"
+                                 : order.Status == RestaurantERP.Models.OrderStatus.Ready ? "جاهز"
+                                 : order.Status == RestaurantERP.Models.OrderStatus.Pending ? "معلق"
+                                 : order.Status.ToString();
+                    var payAr = order.PaymentMethod == RestaurantERP.Models.PaymentMethod.Cash ? "نقدي"
+                                 : order.PaymentMethod == RestaurantERP.Models.PaymentMethod.Card ? "كارت"
+                                 : "إلكتروني";
+                    <tr data-status="@order.Status" data-type="@order.OrderType">
+                        <td><strong>@order.OrderNumber</strong></td>
+                        <td>
+                            <span class="badge @(order.OrderType == RestaurantERP.Models.OrderType.DineIn ? "badge-primary" : order.OrderType == RestaurantERP.Models.OrderType.Takeaway ? "badge-warning" : "badge-info")">
+                                @typeAr
+                            </span>
+                        </td>
+                        <td>@order.Items?.Count</td>
+                        <td><strong>@order.Total.ToString("F2") ج.م</strong></td>
+                        <td>@payAr</td>
+                        <td>
+                            <span class="badge @(order.Status == RestaurantERP.Models.OrderStatus.Completed ? "badge-success" : order.Status == RestaurantERP.Models.OrderStatus.Cancelled ? "badge-danger" : order.Status == RestaurantERP.Models.OrderStatus.Preparing ? "badge-warning" : "badge-primary")">
+                                @statusAr
+                            </span>
+                        </td>
+                        <td>@order.CreatedAt.ToString("hh:mm tt")</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline" onclick="viewOrderDetails(@order.Id)" title="عرض التفاصيل">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline" onclick="reprintInvoice(@order.Id)" title="إعادة طباعة">
+                                <i class="fas fa-print"></i>
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- مودال تفاصيل الطلب -->
+<div class="modal-overlay" id="orderDetailModal">
+    <div class="modal" style="max-width:550px">
+        <div class="modal-header">
+            <h3 class="modal-title">تفاصيل الطلب</h3>
+            <button class="modal-close" onclick="Modal.close('orderDetailModal')">&times;</button>
+        </div>
+        <div class="modal-body" id="orderDetailContent">
+            <div style="text-align:center;padding:40px">
+                <i class="fas fa-spinner fa-spin fa-2x"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function filterTable() {
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const status = document.getElementById('statusFilter').value;
+            const type   = document.getElementById('typeFilter').value;
+            document.querySelectorAll('#ordersTable tbody tr').forEach(row => {
+                const text      = row.textContent.toLowerCase();
+                const rowStatus = row.dataset.status;
+                const rowType   = row.dataset.type;
+                const show = (!search || text.includes(search))
+                          && (!status || rowStatus === status)
+                          && (!type   || rowType   === type);
+                row.style.display = show ? '' : 'none';
+            });
+        }
+
+        async function viewOrderDetails(id) {
+            Modal.open('orderDetailModal');
+            try {
+                const data = await API.get(`/Cashier/GetOrderForPrint?orderId=${id}`);
+                if (data.success) {
+                    const o = data;
+                    const typeAr  = { DineIn:'صالة', Takeaway:'تيك أواي', Delivery:'توصيل' };
+                    const payAr   = { 0:'نقدي', 1:'كارت', 2:'إلكتروني' };
+                    const statAr  = { Completed:'مكتمل', Cancelled:'ملغي', Preparing:'قيد التحضير', Ready:'جاهز', Pending:'معلق' };
+                    document.getElementById('orderDetailContent').innerHTML = `
+                        <div style="border-bottom:1px solid var(--border-color);padding-bottom:16px;margin-bottom:16px">
+                            <div class="d-flex" style="justify-content:space-between;margin-bottom:8px">
+                                <span style="color:var(--text-muted)">رقم الطلب</span><strong>${o.orderNumber}</strong>
+                            </div>
+                            <div class="d-flex" style="justify-content:space-between;margin-bottom:8px">
+                                <span style="color:var(--text-muted)">النوع</span><span>${typeAr[o.orderType] || o.orderType}</span>
+                            </div>
+                            <div class="d-flex" style="justify-content:space-between;margin-bottom:8px">
+                                <span style="color:var(--text-muted)">الحالة</span><span>${statAr[o.status] || o.status}</span>
+                            </div>
+                            <div class="d-flex" style="justify-content:space-between">
+                                <span style="color:var(--text-muted)">طريقة الدفع</span><span>${payAr[o.paymentMethod] || o.paymentMethod}</span>
+                            </div>
+                        </div>
+                        <div style="border-bottom:1px solid var(--border-color);padding-bottom:16px;margin-bottom:16px">
+                            ${(o.items||[]).map(i=>`
+                            <div class="d-flex" style="justify-content:space-between;margin-bottom:8px">
+                                <span>${i.productNameAr || i.productName} ×${i.quantity}</span>
+                                <span>${(i.unitPrice * i.quantity).toFixed(2)} ج.م</span>
+                            </div>`).join('')}
+                        </div>
+                        <div>
+                            <div class="d-flex" style="justify-content:space-between;margin-bottom:6px">
+                                <span style="color:var(--text-muted)">المجموع الفرعي</span><span>${o.subTotal?.toFixed(2)} ج.م</span>
+                            </div>
+                            <div class="d-flex" style="justify-content:space-between;margin-bottom:6px">
+                                <span style="color:var(--text-muted);font-size:10px">* الأسعار شاملة الضريبة</span>
+                            </div>
+                            ${o.discountAmount > 0 ? `<div class="d-flex" style="justify-content:space-between;margin-bottom:6px"><span style="color:var(--text-muted)">خصم</span><span style="color:var(--danger)">-${o.discountAmount?.toFixed(2)} ج.م</span></div>` : ''}
+                            <div class="d-flex" style="justify-content:space-between;font-size:18px;font-weight:700;margin-top:8px;padding-top:8px;border-top:2px solid var(--border-color)">
+                                <span>الإجمالي</span>
+                                <span style="color:var(--primary)">${o.total?.toFixed(2)} ج.م</span>
+                            </div>
+                            <div class="d-flex" style="justify-content:space-between;margin-top:6px">
+                                <span style="color:var(--text-muted)">المدفوع</span><span>${o.amountPaid?.toFixed(2)} ج.م</span>
+                            </div>
+                            <div class="d-flex" style="justify-content:space-between">
+                                <span style="color:var(--text-muted)">الباقي</span><span>${o.change?.toFixed(2)} ج.م</span>
+                            </div>
+                        </div>
+                        <div style="margin-top:20px;display:flex;gap:10px">
+                            <button class="btn btn-primary w-100" onclick="reprintInvoice(${id})">
+                                <i class="fas fa-print me-2"></i>إعادة طباعة
+                            </button>
+                        </div>`;
+                }
+            } catch(e) {
+                document.getElementById('orderDetailContent').innerHTML = '<p style="color:var(--danger)">فشل تحميل تفاصيل الطلب.</p>';
+            }
+        }
+
+        async function reprintInvoice(id) {
+            try {
+                const data = await API.get(`/Cashier/GetOrderForPrint?orderId=${id}`);
+                if (data.success) {
+                    const o = data;
+                    const typeAr = { DineIn:'صالة', Takeaway:'تيك أواي', Delivery:'توصيل' };
+                    const itemsHtml = (o.items||[]).map(i =>
+                        `<tr>
+                            <td style="text-align:right;padding:4px">${i.productNameAr || i.productName}</td>
+                            <td style="text-align:center;padding:4px">${i.quantity}</td>
+                            <td style="text-align:right;padding:4px">${(i.unitPrice*i.quantity).toFixed(2)}</td>
+                        </tr>`
+                    ).join('');
+                    const html = `
+                        <div style="font-family:'Cairo',sans-serif;max-width:300px;margin:0 auto;padding:10px;color:#000">
+                            <div style="text-align:center;border-bottom:2px dashed #333;padding-bottom:10px;margin-bottom:10px">
+                                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                        <img src="/logo.jpg" alt="" style="max-width:70px;max-height:70px;object-fit:contain" onerror="this.style.display='none'">
+                        <img src="/qrcode.jpeg" alt="QR" style="width:65px;height:65px;object-fit:contain">
+                    </div>
+                                <h2 style="margin:0;font-size:18px">نادي دار الطائرات</h2>
+                                <p style="margin:4px 0;font-size:12px">Aircraft Factory Club</p>
+                            </div>
+                            <div style="font-size:12px;margin-bottom:10px;direction:rtl;line-height:1.7">
+                                <div>الطلب: <strong>${o.orderNumber}</strong></div>
+                                <div>التاريخ: ${new Date(o.createdAt.endsWith('Z') ? o.createdAt : o.createdAt + 'Z').toLocaleString('ar-EG')}</div>
+                                <div>النوع: ${typeAr[o.orderType] || o.orderType}</div>
+                                <div>الكاشير: ${o.cashier || 'N/A'}</div>
+                                ${o.table ? `<div>الطاولة: ${o.table}</div>` : ''}
+                            </div>
+                            <table style="width:100%;border-collapse:collapse;font-size:12px;border-top:1px dashed #333;border-bottom:1px dashed #333;direction:rtl">
+                                <thead><tr>
+                                    <th style="text-align:right;padding:4px">الصنف</th>
+                                    <th style="text-align:center;padding:4px">ك</th>
+                                    <th style="text-align:right;padding:4px">السعر</th>
+                                </tr></thead>
+                                <tbody>${itemsHtml}</tbody>
+                            </table>
+                            <div style="font-size:12px;margin-top:10px;direction:rtl;line-height:1.8">
+                                <div style="display:flex;justify-content:space-between"><span>المجموع الفرعي:</span><span>${o.subTotal?.toFixed(2)} ج.م</span></div>
+
+                                ${o.discountAmount > 0 ? `<div style="display:flex;justify-content:space-between"><span>خصم:</span><span>-${o.discountAmount?.toFixed(2)} ج.م</span></div>` : ''}
+                                <div style="display:flex;justify-content:space-between;font-weight:bold;font-size:14px;border-top:1px dashed #333;margin-top:6px;padding-top:6px">
+                                    <span>الإجمالي:</span><span>${o.total?.toFixed(2)} ج.م</span>
+                                </div>
+                                <div style="display:flex;justify-content:space-between"><span>المدفوع:</span><span>${o.amountPaid?.toFixed(2)} ج.م</span></div>
+                                <div style="display:flex;justify-content:space-between"><span>الباقي:</span><span>${o.change?.toFixed(2)} ج.م</span></div>
+                            </div>
+                            <div style="text-align:center;margin-top:16px;font-size:11px;border-top:1px dashed #333;padding-top:10px">
+                                <p style="margin:0">شكراً لزيارتكم</p>
+                            </div>
+                        </div>`;
+                    printInvoice(html);
+                }
+            } catch(e) { Toast.error('فشل تحميل الفاتورة'); }
+        }
+    </script>
+}

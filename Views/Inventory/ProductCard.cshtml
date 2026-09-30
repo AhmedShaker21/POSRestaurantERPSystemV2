@@ -1,0 +1,148 @@
+@model List<RestaurantERP.Controllers.LedgerRow>
+@{
+    var p = ViewBag.Product as RestaurantERP.Models.Product;
+    ViewData["Title"] = "كارت الصنف";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.PageTitle = "كارت الصنف";
+    var from = (DateTime)ViewBag.From;
+    var to = (DateTime)ViewBag.To;
+    var opening = (decimal)ViewBag.Opening;
+    var closing = (decimal)ViewBag.Closing;
+    string N(decimal d) => d.ToString("0.###");
+    string M(decimal d) => d.ToString("N2");
+
+    string TypeAr(RestaurantERP.Models.InventoryLogType t) => t switch
+    {
+        RestaurantERP.Models.InventoryLogType.Supply => "وارد",
+        RestaurantERP.Models.InventoryLogType.Distribution => "منصرف لفرع",
+        RestaurantERP.Models.InventoryLogType.NewProduct => "رصيد افتتاحي",
+        RestaurantERP.Models.InventoryLogType.Sale => "بيع",
+        RestaurantERP.Models.InventoryLogType.Refund => "مرتجع بيع",
+        RestaurantERP.Models.InventoryLogType.Waste => "هالك",
+        RestaurantERP.Models.InventoryLogType.ReturnToWarehouse => "مرتجع للمخزن",
+        _ => "تسوية"
+    };
+}
+
+<div class="page-header no-print">
+    <div>
+        <h1 class="page-title">🧾 كارت الصنف — @p?.NameAr</h1>
+        <p class="page-subtitle">الوحدة: @p?.Unit @(p?.HasPackaging == true ? $"| العبوة: {p.PackagingName} = {N(p.UnitsPerPackage)} {p.Unit}" : "")</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline" href="/Inventory/Dashboard">⬅ لوحة المخزن</a>
+        <button class="btn btn-primary" onclick="window.print()">🖨️ طباعة</button>
+    </div>
+</div>
+
+<div class="card no-print" style="margin-bottom:20px">
+    <div class="card-body">
+        <form method="get" class="d-flex gap-3 align-items-end" style="flex-wrap:wrap">
+            <input type="hidden" name="id" value="@p?.Id">
+            <div class="form-group" style="margin:0">
+                <label class="form-label">من</label>
+                <input type="date" name="from" class="form-control" value="@from.ToString("yyyy-MM-dd")">
+            </div>
+            <div class="form-group" style="margin:0">
+                <label class="form-label">إلى</label>
+                <input type="date" name="to" class="form-control" value="@to.ToString("yyyy-MM-dd")">
+            </div>
+            <button type="submit" class="btn btn-primary">تحديث</button>
+        </form>
+    </div>
+</div>
+
+<div class="print-only" style="text-align:center;margin-bottom:16px">
+    <h2>كارت الصنف — @p?.NameAr</h2>
+    <p>من @from.ToString("yyyy-MM-dd") إلى @to.ToString("yyyy-MM-dd")</p>
+</div>
+
+<div class="stats-grid" style="margin-bottom:24px">
+    <div class="stat-card">
+        <div class="stat-value">@N(opening)</div>
+        <div class="stat-label">رصيد أول المدة</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" style="color:#4CAF50">@N(Model.Sum(r => r.In))</div>
+        <div class="stat-label">إجمالي الوارد</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" style="color:#FF9800">@N(Model.Sum(r => r.Out))</div>
+        <div class="stat-label">إجمالي المنصرف</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">@N(closing)</div>
+        <div class="stat-label">رصيد آخر المدة</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">@M(closing * (p?.CostPrice ?? 0))</div>
+        <div class="stat-label">قيمة الرصيد (ج.م)</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr><th>التاريخ</th><th>الحركة</th><th>المرجع</th><th>البيان</th><th>الفرع</th><th>وارد</th><th>منصرف</th><th>الرصيد</th><th>القيمة</th><th>بواسطة</th></tr>
+            </thead>
+            <tbody>
+                <tr style="background:var(--bg-secondary)">
+                    <td colspan="7" style="font-weight:700">رصيد أول المدة</td>
+                    <td style="font-weight:700">@N(opening)</td>
+                    <td colspan="2"></td>
+                </tr>
+                @if (!Model.Any())
+                {
+                    <tr><td colspan="10" style="text-align:center;color:var(--text-muted)">لا توجد حركات في هذه الفترة</td></tr>
+                }
+                @foreach (var r in Model)
+                {
+                    <tr>
+                        <td>@r.Date.ToString("yyyy-MM-dd HH:mm")</td>
+                        <td><span class="badge badge-primary">@TypeAr(r.Type)</span></td>
+                        <td>@(r.Reference ?? "—")</td>
+                        <td>
+                            @r.Description
+                            @if (r.EnteredAsPackaging != null && r.EnteredQuantity.HasValue)
+                            {
+                                <div style="font-size:10px;color:var(--text-muted)">مسجّل كـ @N(r.EnteredQuantity.Value) @r.EnteredAsPackaging</div>
+                            }
+                        </td>
+                        <td>@(r.Branch ?? "—")</td>
+                        <td style="color:#4CAF50">@(r.In > 0 ? N(r.In) : "—")</td>
+                        <td style="color:#FF9800">@(r.Out > 0 ? N(r.Out) : "—")</td>
+                        <td><strong>@N(r.Balance)</strong></td>
+                        <td>@(r.Value.HasValue ? M(r.Value.Value) : "—")</td>
+                        <td>@r.By</td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="7" style="text-align:left;font-weight:900">رصيد آخر المدة</td>
+                    <td style="font-weight:900">@N(closing)</td>
+                    <td colspan="2"></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+
+@if (p?.ProductBranches != null && p.ProductBranches.Any())
+{
+    <div class="card" style="margin-top:20px">
+        <div class="card-header"><h3 class="card-title">الأرصدة الحالية بالفروع</h3></div>
+        <div class="table-container">
+            <table class="data-table">
+                <thead><tr><th>الفرع</th><th>الرصيد</th></tr></thead>
+                <tbody>
+                    @foreach (var pb in p.ProductBranches.OrderBy(x => x.Branch?.Name))
+                    {
+                        <tr><td>@pb.Branch?.NameAr</td><td><strong>@N(pb.StockQuantity) @p.Unit</strong></td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}

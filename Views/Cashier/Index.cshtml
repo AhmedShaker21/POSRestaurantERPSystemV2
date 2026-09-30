@@ -1,0 +1,1642 @@
+@model IEnumerable<RestaurantERP.Models.Category>
+@{
+    ViewBag.PageTitle = "الكاشير";
+    Layout = "_Layout";
+
+    var settings = ViewBag.Settings as Dictionary<string, string> ?? new();
+    var tables = ViewBag.Tables as List<RestaurantERP.Models.DiningTable> ?? new();
+    var branch = ViewBag.Branch as RestaurantERP.Models.Branch;
+
+    var orgName = settings.GetValueOrDefault("OrgName", "نادي دار الطائرات");
+    var taxRate = settings.GetValueOrDefault("TaxRate", "14");
+    var allBranches = ViewBag.AllBranches as List<RestaurantERP.Models.Branch> ?? new();
+    var isAdmin = (bool)(ViewBag.IsAdmin ?? false);
+}
+
+<style>
+    /* ═══════════════════════════════════════════════════════
+           SHIFT LAMP
+        ═══════════════════════════════════════════════════════ */
+    .shift-lamp-wrap {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        background: rgba(255,255,255,.12);
+        border-radius: 999px;
+        padding: 4px 12px 4px 8px;
+        cursor: pointer;
+        user-select: none;
+        transition: background .2s;
+    }
+
+        .shift-lamp-wrap:hover {
+            background: rgba(255,255,255,.22);
+        }
+
+    .shift-lamp {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        transition: background .4s, box-shadow .4s;
+    }
+
+        .shift-lamp.on {
+            background: #4ade80;
+            box-shadow: 0 0 0 3px rgba(74,222,128,.35),0 0 10px rgba(74,222,128,.7);
+            animation: lamp-pulse 2s infinite;
+        }
+
+        .shift-lamp.off {
+            background: #f87171;
+            box-shadow: 0 0 0 3px rgba(248,113,113,.30);
+        }
+
+        .shift-lamp.loading {
+            background: #fbbf24;
+            box-shadow: 0 0 0 3px rgba(251,191,36,.35);
+            animation: lamp-blink .6s infinite;
+        }
+
+    .shift-lamp-label {
+        font-size: 11px;
+        font-weight: 700;
+        color: #fff;
+        opacity: .9;
+    }
+
+    @@keyframes lamp-pulse {
+        0%, 100% {
+            box-shadow: 0 0 0 3px rgba(74,222,128,.35),0 0 10px rgba(74,222,128,.7);
+        }
+
+        50% {
+            box-shadow: 0 0 0 5px rgba(74,222,128,.20),0 0 18px rgba(74,222,128,.9);
+        }
+    }
+
+    @@keyframes lamp-blink {
+        0%, 100% {
+            opacity: 1
+        }
+
+        50% {
+            opacity: .4
+        }
+    }
+
+    /* ═══════════════════════════════════════════════════════
+           SHIFT ACTION BUTTONS
+        ═══════════════════════════════════════════════════════ */
+    .shift-action-btn {
+        border: none;
+        border-radius: 8px;
+        padding: 6px 12px;
+        font-size: 11px;
+        font-weight: 800;
+        cursor: pointer;
+        transition: .2s;
+        white-space: nowrap;
+    }
+
+        .shift-action-btn:disabled {
+            opacity: .55;
+            cursor: not-allowed;
+        }
+
+        .shift-action-btn.open-btn {
+            background: #22c55e;
+            color: #fff;
+        }
+
+            .shift-action-btn.open-btn:hover:not(:disabled) {
+                background: #16a34a;
+            }
+
+        .shift-action-btn.close-btn {
+            background: #ef4444;
+            color: #fff;
+        }
+
+            .shift-action-btn.close-btn:hover:not(:disabled) {
+                background: #dc2626;
+            }
+
+    /* ═══════════════════════════════════════════════════════
+           BARCODE BUTTONS
+        ═══════════════════════════════════════════════════════ */
+    .barcode-btn {
+        border: none;
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-size: 11px;
+        font-weight: 800;
+        cursor: pointer;
+        transition: .2s;
+        white-space: nowrap;
+        background: rgba(255,255,255,.18);
+        color: #fff;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+        .barcode-btn:hover {
+            background: rgba(255,255,255,.28);
+        }
+
+        .barcode-btn.active {
+            background: #f59e0b;
+            color: #000;
+        }
+
+    .barcode-indicator {
+        position: fixed;
+        top: 70px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1200;
+        background: #1e293b;
+        color: #fff;
+        border-radius: 12px;
+        padding: 8px 18px;
+        font-size: 13px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        box-shadow: 0 4px 20px rgba(0,0,0,.3);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity .25s;
+    }
+
+        .barcode-indicator.show {
+            opacity: 1;
+        }
+
+    .bar-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #4ade80;
+        animation: lamp-pulse 1s infinite;
+    }
+
+    /* ═══════════════════════════════════════════════════════
+           CAMERA SCANNER
+        ═══════════════════════════════════════════════════════ */
+    #cameraViewport {
+        width: 100%;
+        aspect-ratio: 4/3;
+        border-radius: 10px;
+        overflow: hidden;
+        background: #000;
+        position: relative;
+    }
+
+    #cameraVideo {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+    #scanLine {
+        position: absolute;
+        left: 10%;
+        right: 10%;
+        height: 2px;
+        background: #ef4444;
+        box-shadow: 0 0 8px #ef4444;
+        top: 50%;
+        transform: translateY(-50%);
+        animation: scan-move 2s ease-in-out infinite;
+    }
+
+    @@keyframes scan-move {
+        0%, 100% {
+            top: 20%
+        }
+
+        50% {
+            top: 80%
+        }
+    }
+
+    #scanCorners {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+    }
+
+        #scanCorners::before, #scanCorners::after {
+            content: '';
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            border-color: #22c55e;
+            border-style: solid;
+        }
+
+        #scanCorners::before {
+            top: 12px;
+            left: 12px;
+            border-width: 3px 0 0 3px;
+            border-radius: 4px 0 0 4px;
+        }
+
+        #scanCorners::after {
+            bottom: 12px;
+            right: 12px;
+            border-width: 0 3px 3px 0;
+            border-radius: 0 0 4px 0;
+        }
+
+    .scan-corner-bl, .scan-corner-tr {
+        position: absolute;
+        width: 24px;
+        height: 24px;
+        border-color: #22c55e;
+        border-style: solid;
+    }
+
+    .scan-corner-bl {
+        bottom: 12px;
+        left: 12px;
+        border-width: 0 0 3px 3px;
+        border-radius: 0 0 0 4px;
+    }
+
+    .scan-corner-tr {
+        top: 12px;
+        right: 12px;
+        border-width: 3px 3px 0 0;
+        border-radius: 0 4px 0 0;
+    }
+
+    .scan-result-flash {
+        position: absolute;
+        inset: 0;
+        background: rgba(34,197,94,.35);
+        border-radius: 10px;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity .15s;
+    }
+
+        .scan-result-flash.show {
+            opacity: 1;
+        }
+
+    #scannedBarcodeDisplay {
+        font-size: 12px;
+        color: var(--text-secondary);
+        text-align: center;
+        margin-top: 8px;
+        min-height: 18px;
+        font-family: monospace;
+        letter-spacing: 1px;
+    }
+
+    .manual-barcode-row {
+        display: flex;
+        gap: 6px;
+        margin-top: 10px;
+    }
+
+    .manual-barcode-input {
+        flex: 1;
+        padding: 7px 10px;
+        font-size: 13px;
+        border: 1.5px solid var(--border);
+        border-radius: 8px;
+        background: var(--bg-card);
+        color: var(--text-primary);
+        font-family: monospace;
+        letter-spacing: 1px;
+    }
+
+        .manual-barcode-input:focus {
+            outline: none;
+            border-color: var(--primary-light);
+        }
+
+    /* ═══════════════════════════════════════════════════════
+           SHIFT SUMMARY TOAST
+        ═══════════════════════════════════════════════════════ */
+    .shift-summary-toast {
+        position: fixed;
+        bottom: 24px;
+        left: 24px;
+        z-index: 1000;
+        width: 300px;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        box-shadow: 0 12px 35px rgba(0,0,0,.18);
+        padding: 16px;
+        display: none;
+        animation: toast-in .3s ease;
+    }
+
+        .shift-summary-toast.show {
+            display: block;
+        }
+
+    @@keyframes toast-in {
+        from {
+            opacity: 0;
+            transform: translateY(16px)
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0)
+        }
+    }
+
+    .shift-summary-title {
+        font-size: 14px;
+        font-weight: 900;
+        margin-bottom: 10px;
+        color: var(--text-primary);
+    }
+
+    .shift-summary-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 6px;
+        font-size: 12px;
+    }
+
+        .shift-summary-row strong {
+            color: var(--primary);
+        }
+
+    /* ═══════════════════════════════════════════════════════
+           POS LAYOUT
+        ═══════════════════════════════════════════════════════ */
+    /* Two fixed full-height columns only when the screen is genuinely tall enough.
+           On a short screen (VM, small all-in-one, browser zoomed in) the locked height
+           cut off the payment section with no way to reach it — the panels were
+           overflow:hidden and the page itself couldn't scroll. */
+    .pos-layout {
+        display: grid;
+        grid-template-columns: 1fr 400px;
+        gap: 16px;
+        height: calc(100vh - 65px - 48px);
+        min-height: 520px;
+    }
+
+    /* Narrow screen → stack the columns and let the page scroll */
+    @@media(max-width:992px) {
+        .pos-layout {
+            grid-template-columns: 1fr;
+            height: auto;
+            min-height: 0;
+        }
+    }
+
+    /* Short screen → drop the fixed height and let the page scroll instead */
+    @@media(max-height:760px) {
+        .pos-layout {
+            height: auto;
+            min-height: 0;
+        }
+
+        .products-panel,
+        .order-panel {
+            overflow: visible;
+            max-height: none;
+        }
+
+        .products-grid,
+        .order-items-list {
+            overflow-y: visible;
+            max-height: none;
+        }
+
+        .products-grid {
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        }
+    }
+
+    .products-panel {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        min-height: 0;
+    }
+
+    .prod-search {
+        margin-bottom: 12px;
+    }
+
+    .cat-tabs {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+    }
+
+    .cat-tab {
+        padding: 6px 14px;
+        border-radius: 999px;
+        border: 1.5px solid var(--border);
+        background: transparent;
+        color: var(--text-secondary);
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all .2s;
+        font-family: inherit;
+        white-space: nowrap;
+    }
+
+        .cat-tab.active {
+            background: var(--primary-light);
+            border-color: var(--primary-light);
+            color: #fff;
+        }
+
+    .products-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill,minmax(130px,1fr));
+        gap: 10px;
+        overflow-y: auto;
+        flex: 1;
+        padding: 4px 2px;
+    }
+
+    .product-card {
+        background: var(--bg-card);
+        border: 1.5px solid var(--border);
+        border-radius: 12px;
+        padding: 14px 10px;
+        cursor: pointer;
+        text-align: center;
+        transition: all .2s;
+    }
+
+        .product-card:hover {
+            border-color: var(--primary-light);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(37,99,168,.12);
+        }
+
+        .product-card:active {
+            transform: scale(.97);
+        }
+
+        .product-card.barcode-highlight {
+            border-color: #22c55e !important;
+            box-shadow: 0 0 0 3px rgba(34,197,94,.3) !important;
+            animation: card-pop .4s ease;
+        }
+
+    @@keyframes card-pop {
+        0% {
+            transform: scale(1)
+        }
+
+        40% {
+            transform: scale(1.06)
+        }
+
+        100% {
+            transform: scale(1)
+        }
+    }
+
+    .order-panel {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        display: flex;
+        flex-direction: column;
+        /* scroll its own contents rather than clipping the payment section */
+        overflow-y: auto;
+        min-height: 0;
+        box-shadow: var(--shadow);
+    }
+
+    .order-items-list {
+        flex: 1;
+        overflow-y: auto;
+    }
+
+    .pay-mode-opt {
+        cursor: pointer;
+        text-align: center;
+        padding: 7px 4px;
+        border-radius: 8px;
+        font-size: 11px;
+        font-weight: 700;
+        background: rgba(255,255,255,.12);
+        color: #fff;
+        border: 1.5px solid transparent;
+        transition: all .15s;
+        display: block;
+    }
+
+        .pay-mode-opt:has(input:checked) {
+            background: #fff;
+            color: #1e293b;
+            border-color: #fff;
+        }
+</style>
+
+<!-- مؤشر الباركود -->
+<div class="barcode-indicator" id="barcodeIndicator">
+    <div class="bar-dot"></div>
+    <span>📡 سكانر الباركود نشط — امسح المنتج</span>
+</div>
+
+<!-- ملخص إغلاق الوردية -->
+<div class="shift-summary-toast" id="shiftSummaryToast">
+    <div class="shift-summary-title">✅ تم إغلاق الوردية</div>
+    <div class="shift-summary-row"><span>إجمالي المبيعات</span><strong id="summaryTotalSales">0.00 ج.م</strong></div>
+    <div class="shift-summary-row"><span>النقدية المتوقعة</span><strong id="summaryExpectedCash">0.00 ج.م</strong></div>
+    <div class="shift-summary-row"><span>الفرق</span><strong id="summaryDifference">0.00 ج.م</strong></div>
+</div>
+
+<!-- تخطيط POS الرئيسي -->
+<div class="pos-layout">
+
+    <!-- اليسار: المنتجات -->
+    <div class="products-panel">
+        @if (branch != null)
+        {
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;
+                background:linear-gradient(135deg,@branch.ColorHex,@(branch.ColorHex)cc);
+                border-radius:12px;margin-bottom:12px;color:#fff">
+                <span style="font-size:22px">@branch.Icon</span>
+                <div>
+                    <div style="font-weight:800;font-size:14px">@branch.NameAr</div>
+                    <div style="font-size:10px;opacity:.8">@branch.Name</div>
+                </div>
+                @if (branch.IsMainBranch)
+                {
+                    <span style="margin-right:auto;font-size:9px;font-weight:800;
+                        background:rgba(255,255,255,.25);padding:2px 8px;border-radius:20px">
+                        ★ رئيسي
+                    </span>
+                }
+            </div>
+        }
+
+        @if (isAdmin && allBranches.Count > 1)
+        {
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;
+                padding:8px 12px;background:var(--card-bg);border:1px solid var(--border-color);
+                border-radius:10px">
+                <i class="fas fa-code-branch" style="color:var(--primary);font-size:13px"></i>
+                <span style="font-size:12px;font-weight:700;color:var(--text-muted);white-space:nowrap">الفرع:</span>
+                <select onchange="window.location='/Cashier/Index?branchId='+this.value"
+                        class="form-control" style="flex:1;height:34px;font-size:12px;padding:4px 8px;border-radius:8px">
+                    @foreach (var b in allBranches)
+                    {
+                        <option value="@b.Id" selected="@(branch?.Id == b.Id)">@b.Icon @b.NameAr</option>
+                    }
+                </select>
+            </div>
+        }
+
+        <div class="prod-search">
+            <div class="search-bar">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="prodSearch" placeholder="بحث عن منتج أو باركود..."
+                       oninput="filterProducts()" class="form-control">
+            </div>
+        </div>
+
+        <div class="cat-tabs" id="catTabs">
+            <button class="cat-tab active" onclick="filterByCategory(null,this)">🔍 الكل</button>
+            @foreach (var cat in Model)
+            {
+                <button class="cat-tab" onclick="filterByCategory('@cat.Name',this)" data-cat="@cat.Name">
+                    @cat.Icon @cat.NameAr
+                </button>
+            }
+        </div>
+
+        <div class="products-grid" id="productsGrid"></div>
+    </div>
+
+    <!-- اليمين: لوحة الطلب -->
+    <div class="order-panel">
+
+        <!-- الهيدر -->
+        <div style="background:var(--primary);color:#fff;padding:12px 14px">
+
+            <!-- صف 1: العنوان + اسم الفرع + حذف -->
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+                <div>
+                    <h3 style="font-size:15px;font-weight:700;margin:0">طلب جديد</h3>
+                    <small style="opacity:.7;font-size:11px">
+                        @if (branch != null)
+                        {
+                            <span>@branch.Icon @branch.NameAr · </span>
+                        }
+                        <span id="orderNumDisplay">#---</span>
+                    </small>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px">
+                    <div class="shift-lamp-wrap" id="shiftLampWrap" onclick="handleShiftLampClick()" title="حالة الوردية">
+                        <div class="shift-lamp loading" id="shiftLamp"></div>
+                        <span class="shift-lamp-label" id="shiftLampLabel">جاري التحميل...</span>
+                    </div>
+                    <button class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:none" onclick="clearOrder()">🗑️</button>
+                </div>
+            </div>
+
+            <!-- صف 2: بانر حالة الوردية -->
+            <div id="shiftStateBanner" style="display:flex;align-items:center;justify-content:space-between;background:rgba(0,0,0,.25);border-radius:10px;padding:7px 12px;margin-bottom:8px">
+                <div style="display:flex;align-items:center;gap:8px">
+                    <div class="shift-lamp loading" id="shiftLampBanner" style="width:14px;height:14px"></div>
+                    <div>
+                        <div class="shift-lamp-label" id="shiftLampLabel2" style="font-size:13px;font-weight:900">جاري التحميل...</div>
+                        <div id="shiftSubLabel" style="font-size:10px;opacity:.7;color:#fff">يرجى الانتظار</div>
+                    </div>
+                </div>
+                <div id="shiftActionArea" style="display:flex;gap:6px"></div>
+            </div>
+
+            <!-- صف 3: أزرار الباركود -->
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <button id="physicalScannerBtn" class="barcode-btn" onclick="togglePhysicalScanner()" title="سكانر USB / بلوتوث">
+                    <span>📡</span><span style="font-size:10px">سكانر</span>
+                </button>
+                <button class="barcode-btn" onclick="openCameraScanner()" title="سكانر الكاميرا">
+                    <span>📷</span><span style="font-size:10px">كاميرا</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- نوع الطلب + الطاولة -->
+        <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap">
+            <select id="orderType" class="form-control" style="flex:1;min-width:100px;padding:6px 8px;font-size:12px">
+                <option value="0">🪑 صالة</option>
+                <option value="1">🥡 تيك أواي</option>
+                <option value="2">🚗 توصيل</option>
+            </select>
+            <select id="tableSelect" class="form-control" style="flex:1;min-width:90px;padding:6px 8px;font-size:12px" onchange="onTableSelected()">
+                <option value="">-- طاولة --</option>
+                @foreach (var t in tables)
+                {
+                    <option value="@t.Id" data-num="@t.TableNumber">طاولة @t.TableNumber</option>
+                }
+            </select>
+            <button type="button" id="tableBillBtn" class="btn btn-sm" onclick="showTableBill()" disabled
+                    style="background:rgba(255,255,255,.15);color:#fff;border:none;white-space:nowrap;padding:6px 10px;font-size:12px">
+                🧾 حساب الطاولة
+            </button>
+        </div>
+        <div id="tableStatusHint" style="display:none;padding:0 14px 8px;font-size:11px;color:var(--text-secondary)"></div>
+        <div id="payModeRow" style="display:none;padding:0 14px 10px">
+            <div style="font-size:11px;font-weight:700;margin-bottom:5px">الزبون هيدفع دلوقتي؟</div>
+            <div style="display:flex;gap:6px">
+                <label class="pay-mode-opt" style="flex:1">
+                    <input type="radio" name="payMode" value="now" checked onchange="onPayModeChange()" style="display:none">
+                    <span>💵 يدفع دلوقتي</span>
+                </label>
+                <label class="pay-mode-opt" style="flex:1">
+                    <input type="radio" name="payMode" value="later" onchange="onPayModeChange()" style="display:none">
+                    <span>⏳ لسه — افتح حساب</span>
+                </label>
+            </div>
+            <div id="payModeHint" style="font-size:10px;color:var(--text-muted);margin-top:5px"></div>
+        </div>
+
+        <!-- عناصر السلة -->
+        <div class="order-items-list" id="orderItemsList">
+            <div class="order-empty" id="orderEmpty">
+                <div class="empty-icon">🛒</div>
+                <p>لا يوجد منتجات مضافة</p>
+            </div>
+        </div>
+
+        <!-- الإجماليات والدفع -->
+        <div style="padding:12px 16px;border-top:1px solid var(--border)">
+            <div class="order-totals">
+                <div class="total-row">
+                    <span style="color:var(--text-secondary)">المجموع الفرعي</span>
+                    <span id="subTotal">0.00 ج.م</span>
+                </div>
+                @* Tax is included in product prices — no separate tax line *@
+                <div class="total-row" id="discRow" style="display:none">
+                    <span style="color:var(--success)">خصم</span>
+                    <span id="discAmt" style="color:var(--success)">0.00- ج.م</span>
+                </div>
+                <div class="total-row grand">
+                    <span>الإجمالي</span>
+                    <span id="grandTotal">0.00 ج.م</span>
+                </div>
+            </div>
+
+            <div style="display:flex;gap:6px;margin-bottom:10px">
+                <input type="number" id="discount" class="form-control"
+                       placeholder="خصم (ج.م)" min="0" style="padding:6px 10px;font-size:12px" oninput="recalc()">
+                <input type="text" id="customerName" class="form-control"
+                       placeholder="اسم العميل" style="padding:6px 10px;font-size:12px">
+            </div>
+
+            <div style="margin-bottom:10px">
+                <div style="font-size:12px;font-weight:700;color:var(--text-secondary);margin-bottom:6px">طريقة الدفع</div>
+                <div style="display:flex;gap:6px">
+                    <button class="btn btn-sm payment-btn active" onclick="setPayment(0,this)" style="flex:1;font-size:11px;background:var(--primary-light);color:#fff;border:none">💵 نقدي</button>
+                    <button class="btn btn-sm payment-btn btn-outline" onclick="setPayment(1,this)" style="flex:1;font-size:11px">💳 كارت</button>
+                    <button class="btn btn-sm payment-btn btn-outline" onclick="setPayment(2,this)" style="flex:1;font-size:11px">📱 إلكتروني</button>
+                </div>
+            </div>
+
+            <div id="cashSection" style="display:flex;gap:6px;margin-bottom:10px">
+                <div style="flex:1">
+                    <input type="number" id="amountPaid" class="form-control"
+                           placeholder="المبلغ المدفوع" oninput="calcChange()" style="padding:6px 10px;font-size:12px">
+                </div>
+                <div style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:700;color:var(--success);white-space:nowrap">
+                    باقي: <span id="changeAmt">0.00</span>
+                </div>
+            </div>
+
+            <button class="btn btn-accent w-full btn-lg" onclick="placeOrder()" id="placeOrderBtn" disabled>
+                ✅ تأكيد الطلب
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- مودال الفاتورة -->
+<div class="modal-overlay" id="invoiceModal">
+    <div class="modal" style="max-width:400px">
+        <div class="modal-header">
+            <h3 class="modal-title">🖨️ الفاتورة</h3>
+            <button class="modal-close" onclick="Modal.close('invoiceModal')">✕</button>
+        </div>
+        <div class="modal-body" id="invoicePreview"></div>
+        <div class="modal-footer" id="invoiceModalFooter">
+            <button class="btn btn-primary" onclick="doPrint()">🖨️ طباعة</button>
+            <button class="btn btn-accent" onclick="newOrderAfterPrint()">طلب جديد ➕</button>
+        </div>
+    </div>
+</div>
+
+<!-- مودال الوردية -->
+<div class="modal-overlay" id="shiftModal">
+    <div class="modal" style="max-width:380px">
+        <div class="modal-header">
+            <h3 class="modal-title" id="shiftModalTitle">إدارة الوردية</h3>
+            <button class="modal-close" onclick="Modal.close('shiftModal')">✕</button>
+        </div>
+        <div class="modal-body">
+            <div id="openShiftForm">
+                <p style="color:var(--text-secondary);margin-bottom:16px;font-size:13px">
+                    لا يوجد وردية مفتوحة حالياً. أدخل رأس المال لفتح وردية جديدة.
+                </p>
+                <div class="form-group">
+                    <label class="form-label">رأس المال (نقدي)</label>
+                    <input type="number" id="openingCash" class="form-control" value="0" min="0">
+                </div>
+                <button id="doOpenShiftBtn" class="btn btn-success w-full" onclick="doOpenShift()">
+                    🟢 فتح الوردية
+                </button>
+            </div>
+            <div id="closeShiftForm" style="display:none">
+                <div class="alert alert-info" style="margin-bottom:14px;font-size:13px">
+                    ✅ الوردية مفتوحة منذ <strong id="shiftStart">---</strong>
+                </div>
+                <div class="form-group" style="margin-bottom:12px">
+                    <label class="form-label">النقدية الختامية (فعلي)</label>
+                    <input type="number" id="closingCash" class="form-control" value="0" min="0">
+                </div>
+                <div class="form-group" style="margin-bottom:16px">
+                    <label class="form-label">ملاحظات</label>
+                    <textarea id="shiftNotes" class="form-control" rows="2"></textarea>
+                </div>
+                <button id="doCloseShiftBtn" class="btn btn-danger w-full" onclick="doCloseShift()">
+                    🔴 إغلاق الوردية
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- مودال سكانر الكاميرا -->
+<div class="modal-overlay" id="cameraScannerModal">
+    <div class="modal" style="max-width:430px">
+        <div class="modal-header">
+            <h3 class="modal-title">📷 سكانر الكاميرا</h3>
+            <button class="modal-close" onclick="closeCameraScanner()">✕</button>
+        </div>
+        <div class="modal-body" style="padding:16px">
+            <div id="cameraViewport">
+                <video id="cameraVideo" autoplay playsinline muted></video>
+                <div id="scanLine"></div>
+                <div id="scanCorners">
+                    <div class="scan-corner-bl"></div>
+                    <div class="scan-corner-tr"></div>
+                </div>
+                <div class="scan-result-flash" id="scanFlash"></div>
+            </div>
+            <p id="scannedBarcodeDisplay">وجّه الكاميرا نحو الباركود...</p>
+            <div style="margin-top:8px">
+                <select id="cameraSelect" class="form-control" style="font-size:12px;padding:6px 8px" onchange="switchCamera()">
+                    <option>جاري تحميل الكاميرات...</option>
+                </select>
+            </div>
+            <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
+                <div style="font-size:12px;font-weight:700;color:var(--text-secondary);margin-bottom:6px">📝 إدخال يدوي أو سكانر USB</div>
+                <div class="manual-barcode-row">
+                    <input type="text" id="manualBarcodeInput" class="manual-barcode-input"
+                           placeholder="اكتب أو امسح الباركود هنا..."
+                           onkeydown="handleManualBarcodeKey(event)" autocomplete="off">
+                    <button class="btn btn-primary btn-sm" onclick="submitManualBarcode()" style="padding:7px 14px;font-size:12px">بحث</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/lib/js/quagga.min.js"></script>
+    <script>
+        /* ════════════════════════════════════════════════════
+        ثوابت من الإعدادات
+        ════════════════════════════════════════════════════ */
+        const TAX_RATE = @taxRate / 100;
+        const ORG_NAME = '@Html.Raw(orgName)';
+        const ORG_NAME_EN = '@Html.Raw(settings.GetValueOrDefault("OrgNameEn", "Aircraft Factory Club"))';
+        const FOOTER = '@Html.Raw(settings.GetValueOrDefault("FooterNote", "شكراً لزيارتكم"))';
+        const CURRENCY = '@settings.GetValueOrDefault("Currency", "EGP")';
+        const PHONE = '@settings.GetValueOrDefault("Phone", "")';
+        const ADDRESS = '@Html.Raw(settings.GetValueOrDefault("Address", ""))';
+
+        /* ════════════════════════════════════════════════════
+        الحالة
+        ════════════════════════════════════════════════════ */
+        let products = [];
+        let cart = [];
+        let selectedPayment = 0;
+        let currentOrderId = null;
+        let currentCategoryId = null;
+        let lastInvoiceHtml = '';
+        let isShiftOpen = null;
+        let currentShiftStartTime = null;
+        let shiftStatusLoading = false;
+        let tablesStatusCache = [];   // last GetTablesStatus() result
+        let billMode = false; // true while invoice modal is showing a combined table bill
+
+        /* ════════════════════════════════════════════════════
+        سكانر الباركود الفيزيائي
+        ════════════════════════════════════════════════════ */
+        let physicalScannerActive = false;
+        let barcodeBuffer = '';
+        let barcodeTimer = null;
+        const BARCODE_GAP_MS = 80;
+
+        function togglePhysicalScanner() {
+            physicalScannerActive = !physicalScannerActive;
+            const btn = document.getElementById('physicalScannerBtn');
+            const ind = document.getElementById('barcodeIndicator');
+            if (physicalScannerActive) {
+                btn.classList.add('active'); ind.classList.add('show');
+                Toast.info('📡 سكانر الباركود نشط');
+            } else {
+                btn.classList.remove('active'); ind.classList.remove('show');
+                barcodeBuffer = ''; clearTimeout(barcodeTimer);
+            }
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if (!physicalScannerActive) return;
+            const tag = document.activeElement.tagName;
+            const id = document.activeElement.id;
+            if (tag === 'TEXTAREA') return;
+            if (tag === 'INPUT' && id !== 'prodSearch') return;
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const code = barcodeBuffer.trim(); barcodeBuffer = ''; clearTimeout(barcodeTimer);
+                if (code.length >= 2) processBarcode(code);
+                return;
+            }
+            if (e.key.length === 1) {
+                barcodeBuffer += e.key;
+                clearTimeout(barcodeTimer);
+                barcodeTimer = setTimeout(() => {
+                    const code = barcodeBuffer.trim(); barcodeBuffer = '';
+                    if (code.length >= 4) processBarcode(code);
+                }, BARCODE_GAP_MS);
+            }
+        });
+
+        /* ════════════════════════════════════════════════════
+        سكانر الكاميرا (Quagga.js)
+        ════════════════════════════════════════════════════ */
+        let cameraStream = null, quaggaRunning = false, lastCameraCode = '', cameraCooldown = false;
+
+        async function openCameraScanner() {
+            Modal.open('cameraScannerModal');
+            await populateCameraList();
+            startCameraScanner();
+        }
+
+        async function populateCameraList() {
+            try {
+                await navigator.mediaDevices.getUserMedia({ video: true });
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const cameras = devices.filter(d => d.kind === 'videoinput');
+                const sel = document.getElementById('cameraSelect');
+                sel.innerHTML = cameras.map((d, i) => `<option value="${d.deviceId}">${d.label || 'كاميرا ' + (i + 1)}</option>`).join('');
+                const backIdx = cameras.findIndex(d => /back|rear|environment/i.test(d.label));
+                if (backIdx > -1) sel.selectedIndex = backIdx;
+            } catch (_) { }
+        }
+
+        function switchCamera() { stopCameraScanner(); setTimeout(startCameraScanner, 300); }
+
+        function startCameraScanner() {
+            if (typeof Quagga === 'undefined') {
+                Toast.error('مكتبة الماسح غير محمّلة — تأكد من وجود /lib/js/quagga.min.js');
+                return;
+            }
+            const sel = document.getElementById('cameraSelect');
+            const deviceId = sel.value || undefined;
+            const constraints = deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: 'environment' } };
+            Quagga.init({
+                inputStream: { name: 'Live', type: 'LiveStream', target: document.getElementById('cameraVideo'), constraints },
+                decoder: { readers: ['ean_reader', 'ean_8_reader', 'upc_reader', 'upc_e_reader', 'code_128_reader', 'code_39_reader', 'code_93_reader', 'codabar_reader', 'i2of5_reader', '2of5_reader'] },
+                locate: true
+            }, function(err) {
+                if (err) { Toast.error('تعذر تشغيل الكاميرا — تحقق من الصلاحيات'); return; }
+                Quagga.start(); quaggaRunning = true;
+                cameraStream = document.getElementById('cameraVideo').srcObject;
+            });
+            Quagga.onDetected(function(result) {
+                const code = result?.codeResult?.code;
+                if (!code || cameraCooldown || code === lastCameraCode) return;
+                lastCameraCode = code; cameraCooldown = true;
+                setTimeout(() => { cameraCooldown = false; lastCameraCode = ''; }, 1500);
+                const flash = document.getElementById('scanFlash');
+                flash.classList.add('show'); setTimeout(() => flash.classList.remove('show'), 300);
+                document.getElementById('scannedBarcodeDisplay').textContent = '✅ ' + code;
+                processBarcode(code);
+            });
+        }
+
+        function stopCameraScanner() {
+            if (quaggaRunning) { try { Quagga.stop(); } catch (_) { } quaggaRunning = false; }
+            if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+        }
+
+        function closeCameraScanner() {
+            stopCameraScanner();
+            document.getElementById('scannedBarcodeDisplay').textContent = 'وجّه الكاميرا نحو الباركود...';
+            document.getElementById('manualBarcodeInput').value = '';
+            Modal.close('cameraScannerModal');
+        }
+
+        document.getElementById('cameraScannerModal').addEventListener('click', function(e) { if (e.target === this) closeCameraScanner(); });
+        function handleManualBarcodeKey(e) { if (e.key === 'Enter') { e.preventDefault(); submitManualBarcode(); } }
+        function submitManualBarcode() {
+            const val = document.getElementById('manualBarcodeInput').value.trim();
+            if (!val) return;
+            document.getElementById('manualBarcodeInput').value = '';
+            processBarcode(val);
+        }
+
+        /* ════════════════════════════════════════════════════
+        البحث بالباركود
+        ════════════════════════════════════════════════════ */
+        function processBarcode(code) {
+            let product = products.find(p => p.barcode && p.barcode === code);
+            if (!product) { const num = parseInt(code, 10); if (!isNaN(num)) product = products.find(p => p.id === num); }
+            if (!product) {
+                Toast.error('⚠️ لم يتم العثور على منتج: ' + code);
+                document.getElementById('prodSearch').value = code; filterProducts(); return;
+            }
+            if (product.trackStock && product.stockQuantity <= 0) { Toast.error('⚠️ المنتج غير متوفر في المخزون'); return; }
+            addToCart(product.id);
+            highlightCard(product.id);
+            Toast.success('✅ ' + (product.nameAr || product.name));
+        }
+
+        function highlightCard(productId) {
+            const card = document.querySelector(`.product-card[data-pid="${productId}"]`);
+            if (!card) return;
+            card.classList.add('barcode-highlight');
+            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            setTimeout(() => card.classList.remove('barcode-highlight'), 700);
+        }
+
+        /* ════════════════════════════════════════════════════
+        لمبة الوردية
+        ════════════════════════════════════════════════════ */
+        function setLamp(state) {
+            // Update both lamps (header + banner)
+            ['shiftLamp', 'shiftLampBanner'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.className = 'shift-lamp ' + state;
+            });
+
+            const label = document.getElementById('shiftLampLabel');
+            const label2 = document.getElementById('shiftLampLabel2');
+            const subLabel = document.getElementById('shiftSubLabel');
+            const actionArea = document.getElementById('shiftActionArea');
+            const placeBtn = document.getElementById('placeOrderBtn');
+            const banner = document.getElementById('shiftStateBanner');
+
+            if (state === 'on') {
+                if (label) label.textContent = 'وردية مفتوحة';
+                if (label2) label2.textContent = '🟢 الوردية مفتوحة الآن';
+                if (label2) label2.style.color = '#4ade80';
+                if (subLabel) {
+                    const since = currentShiftStartTime
+                        ? 'منذ ' + new Date(currentShiftStartTime.endsWith('Z') ? currentShiftStartTime : currentShiftStartTime + 'Z').toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })
+                        : '';
+                    subLabel.textContent = since;
+                }
+                if (actionArea) actionArea.innerHTML = `
+                <button class="shift-action-btn close-btn" onclick="handleCloseShift()" style="font-size:12px;padding:6px 14px">
+                🔴 إغلاق الوردية
+                </button>`;
+                if (placeBtn && cart.length > 0) { placeBtn.disabled = false; placeBtn.style.opacity = ''; }
+                if (placeBtn) placeBtn.innerHTML = '✅ تأكيد الطلب';
+                if (banner) banner.style.background = 'rgba(34,197,94,.2)';
+
+            } else if (state === 'off') {
+                if (label) label.textContent = 'لا توجد وردية';
+                if (label2) label2.textContent = '🔴 لا توجد وردية مفتوحة';
+                if (label2) label2.style.color = '#f87171';
+                if (subLabel) subLabel.textContent = 'يجب فتح وردية قبل إنشاء أي طلب';
+                if (actionArea) actionArea.innerHTML = `
+                <button class="shift-action-btn open-btn" onclick="handleOpenShift()" style="font-size:12px;padding:6px 14px">
+                🟢 فتح وردية جديدة
+                </button>`;
+                if (placeBtn) { placeBtn.disabled = true; placeBtn.style.opacity = '0.4'; placeBtn.innerHTML = '⛔ افتح وردية أولاً'; }
+                if (banner) banner.style.background = 'rgba(239,68,68,.2)';
+
+            } else {
+                if (label) label.textContent = 'جاري التحميل...';
+                if (label2) label2.textContent = 'جاري التحقق من الوردية...';
+                if (label2) label2.style.color = '#fbbf24';
+                if (subLabel) subLabel.textContent = '';
+                if (actionArea) actionArea.innerHTML = '';
+                if (placeBtn) { placeBtn.disabled = true; placeBtn.style.opacity = '0.4'; }
+                if (banner) banner.style.background = 'rgba(251,191,36,.15)';
+            }
+        }
+
+        function setShiftBtnsDisabled(v) {
+            document.querySelectorAll('#shiftActionArea button').forEach(b => b.disabled = v);
+        }
+
+        function setModalBtn(id, loading, loadTxt, normTxt) {
+            const b = document.getElementById(id);
+            if (!b) return;
+            b.disabled = loading; b.innerHTML = loading ? loadTxt : normTxt;
+        }
+
+        async function fetchShiftStatus() {
+            if (shiftStatusLoading) return null;
+            shiftStatusLoading = true; setLamp('loading'); setShiftBtnsDisabled(true);
+            try {
+                const s = await API.get('/Cashier/GetCurrentShift?t=' + Date.now());
+                isShiftOpen = !!s?.isOpen; currentShiftStartTime = s?.startTime || null;
+                setLamp(isShiftOpen ? 'on' : 'off'); return s;
+            } catch (_) { Toast.error('تعذر تحميل حالة الوردية'); setLamp('off'); return null; }
+            finally { shiftStatusLoading = false; setShiftBtnsDisabled(false); }
+        }
+
+        function handleShiftLampClick() {
+            if (isShiftOpen === true) handleCloseShift(); else handleOpenShift();
+        }
+
+        async function handleOpenShift() {
+            setShiftBtnsDisabled(true);
+            try {
+                const s = await fetchShiftStatus();
+                if (!s) return;
+                if (s.isOpen) { Toast.info('⚠️ توجد وردية مفتوحة بالفعل'); return; }
+                document.getElementById('openShiftForm').style.display = 'block';
+                document.getElementById('closeShiftForm').style.display = 'none';
+                document.getElementById('shiftModalTitle').textContent = '🟢 فتح وردية جديدة';
+                document.getElementById('openingCash').value = 0;
+                Modal.open('shiftModal');
+            } finally { setShiftBtnsDisabled(false); }
+        }
+
+        async function doOpenShift() {
+            const cash = parseFloat(document.getElementById('openingCash').value) || 0;
+            setModalBtn('doOpenShiftBtn', true, '⏳ جاري الفتح...', '🟢 فتح الوردية');
+            try {
+                const r = await API.post('/Cashier/OpenShift', { openingCash: cash });
+                if (r.success) {
+                    isShiftOpen = true; currentShiftStartTime = new Date().toISOString();
+                    setLamp('on'); Toast.success('✅ تم فتح الوردية'); Modal.close('shiftModal');
+                } else { Toast.error(r.message || 'خطأ في فتح الوردية'); }
+            } catch (_) { Toast.error('حدث خطأ أثناء فتح الوردية'); }
+            finally { setModalBtn('doOpenShiftBtn', false, '', '🟢 فتح الوردية'); }
+        }
+
+        async function handleCloseShift() {
+            setShiftBtnsDisabled(true);
+            try {
+                const s = await fetchShiftStatus();
+                if (!s) return;
+                if (!s.isOpen) { Toast.info('⚠️ لا توجد وردية مفتوحة'); return; }
+                document.getElementById('openShiftForm').style.display = 'none';
+                document.getElementById('closeShiftForm').style.display = 'block';
+                document.getElementById('shiftModalTitle').textContent = '🔴 إغلاق الوردية';
+                document.getElementById('shiftStart').textContent =
+                    currentShiftStartTime ? new Date(currentShiftStartTime).toLocaleTimeString('ar-EG') : '---';
+                document.getElementById('closingCash').value = 0;
+                document.getElementById('shiftNotes').value = '';
+                Modal.open('shiftModal');
+            } finally { setShiftBtnsDisabled(false); }
+        }
+
+        async function doCloseShift() {
+            const cash = parseFloat(document.getElementById('closingCash').value) || 0;
+            const notes = document.getElementById('shiftNotes').value || '';
+            setModalBtn('doCloseShiftBtn', true, '⏳ جاري الإغلاق...', '🔴 إغلاق الوردية');
+            try {
+                const r = await API.post('/Cashier/CloseShift', { closingCash: cash, notes });
+                if (r.success) {
+                    isShiftOpen = false; currentShiftStartTime = null; setLamp('off');
+                    Modal.close('shiftModal');
+                    document.getElementById('summaryTotalSales').textContent = Number(r.totalSales || 0).toFixed(2) + ' ج.م';
+                    document.getElementById('summaryExpectedCash').textContent = Number(r.expectedCash || 0).toFixed(2) + ' ج.م';
+                    document.getElementById('summaryDifference').textContent = Number(r.difference || 0).toFixed(2) + ' ج.م';
+                    const box = document.getElementById('shiftSummaryToast');
+                    box.classList.add('show'); setTimeout(() => box.classList.remove('show'), 7000);
+                    Toast.success('✅ تم إغلاق الوردية');
+                } else { Toast.error(r.message || 'خطأ في إغلاق الوردية'); }
+            } catch (_) { Toast.error('حدث خطأ أثناء إغلاق الوردية'); }
+            finally { setModalBtn('doCloseShiftBtn', false, '', '🔴 إغلاق الوردية'); }
+        }
+
+        /* ════════════════════════════════════════════════════
+        المنتجات
+        ════════════════════════════════════════════════════ */
+        async function loadProducts() {
+            const urlBranchId = new URLSearchParams(window.location.search).get('branchId') || '';
+            const productsUrl = urlBranchId ? `/Cashier/GetProducts?branchId=${urlBranchId}` : '/Cashier/GetProducts';
+            products = await API.get(productsUrl);
+            renderProducts(products || []);
+        }
+
+        function renderProducts(list) {
+            const grid = document.getElementById('productsGrid');
+            if (!list || list.length === 0) {
+                grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted)">🍽️ لا توجد منتجات</div>';
+                return;
+            }
+            grid.innerHTML = list.map(p => `
+                <div class="product-card ${p.trackStock && p.stockQuantity <= 0 ? 'out-of-stock' : ''}"
+                data-pid="${p.id}"
+                onclick="${p.trackStock && p.stockQuantity <= 0 ? '' : `addToCart(${p.id})`}"
+                style="border-top:3px solid ${p.categoryColor || 'var(--primary-light)'}">
+                <div style="font-size:28px;margin-bottom:6px">${p.categoryIcon || '🍽️'}</div>
+                <div style="font-size:12px;font-weight:700;color:var(--text-primary);line-height:1.3;margin-bottom:4px">
+                ${p.nameAr || p.name}
+                </div>
+                ${p.skipKitchen ? `<div style="background:#22c55e22;color:#22c55e;font-size:9px;font-weight:800;padding:2px 7px;border-radius:10px;margin-bottom:3px;display:inline-block">⚡ فوري</div>` : ''}
+                <div style="font-size:14px;font-weight:900;color:var(--primary-light)">${Number(p.price).toFixed(2)} ج.م</div>
+                ${p.barcode ? `<div style="font-size:10px;color:var(--text-muted);font-family:monospace;margin-top:2px">📊 ${p.barcode}</div>` : ''}
+                ${p.trackStock ? (
+                    p.stockQuantity <= 0
+                        ? `<div style="font-size:10px;font-weight:800;color:#fff;background:var(--danger);border-radius:6px;padding:1px 5px;display:inline-block">⛔ ناقص — كلّم المخزن</div>`
+                        : `<div style="font-size:11px;font-weight:${p.stockQuantity < (p.minStockAlert || 5) ? '800' : '600'};color:${p.stockQuantity < (p.minStockAlert || 5) ? 'var(--danger)' : 'var(--text-muted)'}">مخزون: ${p.stockQuantity} ${p.stockUnit || ''}${p.stockQuantity < (p.minStockAlert || 5) ? ' ⚠️' : ''}</div>`
+                ) : ''}
+                </div>`).join('');
+        }
+
+        function filterByCategory(categoryName, btn) {
+            currentCategoryId = categoryName;
+            document.querySelectorAll('.cat-tab').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            filterProducts();
+        }
+
+        function filterProducts() {
+            const q = (document.getElementById('prodSearch').value || '').toLowerCase();
+            let list = [...products];
+            if (currentCategoryId) list = list.filter(p => (p.categoryName || '') === currentCategoryId);
+            if (q) list = list.filter(p =>
+                (p.name || '').toLowerCase().includes(q) ||
+                (p.nameAr || '').toLowerCase().includes(q) ||
+                (p.barcode || '').toLowerCase().includes(q)
+            );
+            renderProducts(list);
+        }
+
+        /* ════════════════════════════════════════════════════
+        السلة
+        ════════════════════════════════════════════════════ */
+        function addToCart(productId) {
+            const p = products.find(x => x.id === productId);
+            if (!p) return;
+            const ex = cart.find(c => c.productId === productId);
+            if (ex) { ex.quantity++; ex.totalPrice = ex.unitPrice * ex.quantity; }
+            else cart.push({ productId, name: p.name, nameAr: p.nameAr, unitPrice: p.price, quantity: 1, totalPrice: p.price });
+            renderCart();
+            const btn = document.getElementById('placeOrderBtn');
+            btn.style.transform = 'scale(1.02)';
+            setTimeout(() => btn.style.transform = '', 150);
+        }
+
+        function changeQty(productId, delta) {
+            const item = cart.find(c => c.productId === productId);
+            if (!item) return;
+            item.quantity += delta;
+            if (item.quantity <= 0) cart = cart.filter(c => c.productId !== productId);
+            else item.totalPrice = item.unitPrice * item.quantity;
+            renderCart();
+        }
+
+        function renderCart() {
+            const list = document.getElementById('orderItemsList');
+            const empty = document.getElementById('orderEmpty');
+            if (!list) { recalc(); return; }          // nothing to draw into
+
+            if (cart.length === 0) {
+                list.innerHTML = '';
+                if (empty) { list.appendChild(empty); empty.style.display = 'flex'; }
+                const btn = document.getElementById('placeOrderBtn');
+                if (btn) btn.disabled = true;
+                recalc(); return;
+            }
+
+            list.innerHTML = cart.map(item => `
+                <div class="order-item" id="item-${item.productId}">
+                <div style="flex:1;min-width:0">
+                <div class="order-item-name">${item.nameAr || item.name}</div>
+                <div style="font-size:11px;color:var(--text-muted)">${Number(item.unitPrice).toFixed(2)} ج.م × ${item.quantity}</div>
+                </div>
+                <div class="qty-controls">
+                <button class="qty-btn" onclick="changeQty(${item.productId},-1)">−</button>
+                <span class="qty-num">${item.quantity}</span>
+                <button class="qty-btn" onclick="changeQty(${item.productId},1)">+</button>
+                </div>
+                <div class="order-item-price">${Number(item.totalPrice).toFixed(2)}</div>
+                </div>`).join('');
+
+            document.getElementById('placeOrderBtn').disabled = (isShiftOpen !== true);
+            recalc();
+        }
+
+        /* Every lookup guarded — recalc runs inside the cart reset, and one missing
+           node used to abort the whole sequence. */
+        function recalc() {
+            const $ = id => document.getElementById(id);
+            const sub = cart.reduce((s, i) => s + (Number(i.totalPrice) || 0), 0);
+            const disc = Math.min(parseFloat($('discount')?.value) || 0, sub);
+            // Tax already included in each product price — grand total = sub - discount only
+            const total = Math.max(0, sub - disc);
+            if ($('subTotal')) $('subTotal').textContent = sub.toFixed(2) + ' ج.م';
+            if ($('grandTotal')) $('grandTotal').textContent = total.toFixed(2) + ' ج.م';
+            const dr = $('discRow');
+            if (dr) {
+                if (disc > 0) {
+                    dr.style.display = 'flex';
+                    if ($('discAmt')) $('discAmt').textContent = disc.toFixed(2) + '- ج.م';
+                } else dr.style.display = 'none';
+            }
+            calcChange();
+        }
+
+        function calcChange() {
+            const total = parseFloat(document.getElementById('grandTotal').textContent) || 0;
+            const paid = parseFloat(document.getElementById('amountPaid').value) || 0;
+            document.getElementById('changeAmt').textContent = Math.max(0, paid - total).toFixed(2);
+        }
+
+        function setPayment(method, btn) {
+            selectedPayment = method;
+            document.querySelectorAll('.payment-btn').forEach(b => { b.className = 'btn btn-sm payment-btn btn-outline'; b.style.cssText = 'flex:1;font-size:11px'; });
+            btn.className = 'btn btn-sm payment-btn';
+            btn.style.cssText = 'flex:1;font-size:11px;background:var(--primary-light);color:#fff;border:none';
+            document.getElementById('cashSection').style.display = method === 0 ? 'flex' : 'none';
+        }
+
+        /* Reset the cart. Every element lookup is guarded: 'taxAmt' was removed when
+           tax became price-inclusive, and the unguarded reference used to throw here,
+           leaving the cart on screen with a half-updated total. */
+        function resetCart() {
+            cart = [];
+            currentOrderId = null;
+            ['discount', 'amountPaid', 'customerName'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+            [['subTotal', '0.00 ج.م'], ['taxAmt', '0.00 ج.م'], ['grandTotal', '0.00 ج.م'], ['changeAmt', '0.00']]
+                .forEach(([id, val]) => { const el = document.getElementById(id); if (el) el.textContent = val; });
+            const dr = document.getElementById('discRow');
+            if (dr) dr.style.display = 'none';
+            renderCart();
+        }
+
+        function clearOrder() {
+            resetCart();
+            Toast.info('تم مسح الطلب');
+        }
+
+        /* ════════════════════════════════════════════════════
+        تأكيد الطلب
+        ════════════════════════════════════════════════════ */
+        async function placeOrder() {
+            if (cart.length === 0) return;
+
+            // التحقق من الوردية مباشرة من الخادم
+            try {
+                const shiftCheck = await API.get('/Cashier/GetCurrentShift?t=' + Date.now());
+                if (!shiftCheck || !shiftCheck.isOpen) {
+                    isShiftOpen = false; setLamp('off');
+                    Toast.error('⛔ لا توجد وردية مفتوحة — يرجى فتح وردية أولاً');
+                    return;
+                }
+                isShiftOpen = true; setLamp('on');
+            } catch (e) { Toast.error('تعذر التحقق من حالة الوردية'); return; }
+
+            const disc = parseFloat(document.getElementById('discount').value) || 0;
+            const total = parseFloat(document.getElementById('grandTotal').textContent) || 0;
+            const paid = parseFloat(document.getElementById('amountPaid').value) || total;
+            const tableIdVal = document.getElementById('tableSelect').value || null;
+            const payNow = !tableIdVal || document.querySelector('input[name="payMode"]:checked')?.value !== 'later';
+            Loading.show();
+            try {
+                const r = await API.post('/Cashier/PlaceOrder', {
+                    items: cart.map(i => ({ productId: i.productId, quantity: i.quantity })),
+                    tableId: tableIdVal,
+                    type: parseInt(document.getElementById('orderType').value),
+                    customerName: document.getElementById('customerName').value,
+                    discountAmount: disc, amountPaid: paid, paymentMethod: selectedPayment,
+                    payNow: payNow
+                });
+                if (r.success) {
+                    currentOrderId = r.orderId;
+                    if (r.tableId && !r.isPaid) {
+                        // Open tab: the customer is still sitting there and will likely order more.
+                        // Don't print anything yet — keep accumulating until they ask to settle.
+                        Toast.success('تم إضافة الطلب #' + r.orderNumber + ' لحساب طاولة ' + (document.querySelector('#tableSelect option:checked')?.dataset.num || ''));
+                        clearCartOnly();
+                        await refreshTablesStatus();
+                    } else {
+                        Toast.success('تم إنشاء الطلب #' + r.orderNumber);
+                        // Show the receipt FIRST. Resetting first meant any error inside the reset
+                        // silently swallowed the invoice window.
+                        await showInvoice(r.orderId);
+                        try { resetCart(); } catch (e) { console.error('resetCart failed:', e); }
+                    }
+                } else {
+                    Toast.error(r.message || 'حدث خطأ في إنشاء الطلب');
+                }
+            } finally { Loading.hide(); }
+        }
+
+        function clearCartOnly() { resetCart(); }
+
+        /* ════════════════════════════════════════════════════
+        الطاولات — حالة حيّة + حساب الطاولة
+        ════════════════════════════════════════════════════ */
+        async function refreshTablesStatus() {
+            try {
+                tablesStatusCache = await API.get('/Cashier/GetTablesStatus?t=' + Date.now());
+                const sel = document.getElementById('tableSelect');
+                [...sel.options].forEach(opt => {
+                    if (!opt.value) return;
+                    const info = tablesStatusCache.find(t => String(t.id ?? t.Id) === opt.value);
+                    if (!info) return;
+                    const occupied = (info.status ?? info.Status) === 'Occupied';
+                    const count = info.openOrdersCount ?? info.OpenOrdersCount ?? 0;
+                    opt.textContent = (occupied ? '🟠 ' : '🟢 ') + 'طاولة ' + opt.dataset.num + (occupied ? ` (مشغولة – ${count} طلب)` : '');
+                });
+                onTableSelected();
+            } catch (_) { /* ignore polling errors */ }
+        }
+
+        function onTableSelected() {
+            const sel = document.getElementById('tableSelect');
+            const billBtn = document.getElementById('tableBillBtn');
+            const hint = document.getElementById('tableStatusHint');
+            const payRow = document.getElementById('payModeRow');
+            const tableId = sel.value;
+            if (!tableId) {
+                billBtn.disabled = true;
+                hint.style.display = 'none';
+                payRow.style.display = 'none';
+                return;
+            }
+
+            payRow.style.display = 'block';
+            onPayModeChange();
+
+            const info = tablesStatusCache.find(t => String(t.id ?? t.Id) === tableId);
+            const occupied = info && (info.status ?? info.Status) === 'Occupied';
+            billBtn.disabled = !occupied;
+            if (occupied) {
+                const count = info.openOrdersCount ?? info.OpenOrdersCount ?? 0;
+                const outstanding = info.outstanding ?? info.Outstanding ?? 0;
+                hint.style.display = 'block';
+                hint.innerHTML = outstanding > 0
+                    ? `🟠 الطاولة مشغولة — ${count} طلب، <strong>غير مدفوع: ${Number(outstanding).toFixed(0)} ج.م</strong>`
+                    : `🟠 الطاولة مشغولة — ${count} طلب (كلها مدفوعة)`;
+            } else {
+                hint.style.display = 'none';
+            }
+        }
+
+        function onPayModeChange() {
+            const later = document.querySelector('input[name="payMode"]:checked')?.value === 'later';
+            const el = document.getElementById('payModeHint');
+            el.textContent = later
+                ? 'الطلب هيتسجل على حساب الطاولة من غير تحصيل — تقدر تزود عليه وتحصّل الكل مرة واحدة في الآخر.'
+                : 'هيتحصّل فورًا وتطلع الفاتورة على طول.';
+            const paidBox = document.getElementById('amountPaid');
+            if (paidBox) paidBox.disabled = later;
+        }
+
+        async function showTableBill() {
+            const tableId = document.getElementById('tableSelect').value;
+            if (!tableId) return;
+            Loading.show();
+            try {
+                const data = await API.get(`/Cashier/GetTableBill?tableId=${tableId}&t=${Date.now()}`);
+                if (!data || data.success === false) { Toast.error(data?.message || 'لا يوجد حساب مفتوح على هذه الطاولة'); return; }
+
+                const rows = (data.items || []).map(i => `
+                <tr>
+                <td style="text-align:right;direction:rtl;padding:4px">${i.productNameAr || i.productName}</td>
+                <td style="text-align:center;padding:4px">${i.quantity}</td>
+                <td style="text-align:right;padding:4px">${Number(i.unitPrice).toFixed(2)}</td>
+                <td style="text-align:right;padding:4px">${Number(i.totalPrice).toFixed(2)}</td>
+                </tr>`).join('');
+
+                const orderList = (data.orders || []).map(o =>
+                    `${o.orderNumber}${o.isPaid ? '' : ' ⏳'}`).join('، ');
+
+                const html = `
+                <div style="font-family:'Cairo',sans-serif;max-width:300px;margin:0 auto;padding:10px;color:#000">
+                <div style="border-bottom:2px dashed #333;padding-bottom:10px;margin-bottom:10px;text-align:center">
+                <h2 style="margin:0;font-size:18px">${ORG_NAME}</h2>
+                <p style="margin:4px 0;font-size:12px">${ORG_NAME_EN}</p>
+                </div>
+                <div style="font-size:12px;margin-bottom:10px;direction:rtl;line-height:1.7">
+                <div>حساب طاولة: <strong>${data.tableNumber}</strong></div>
+                <div>عدد الطلبات: ${data.orderCount}</div>
+                <div style="font-size:10px">${orderList}</div>
+                </div>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;border-top:1px dashed #333;border-bottom:1px dashed #333;direction:rtl">
+                <thead><tr>
+                <th style="text-align:right;padding:4px">الصنف</th>
+                <th style="text-align:center;padding:4px">ك</th>
+                <th style="text-align:right;padding:4px">سعر</th>
+                <th style="text-align:right;padding:4px">إجمالي</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+                </table>
+                <div style="font-size:12px;margin-top:10px;direction:rtl;line-height:1.8">
+                ${data.discountAmount > 0 ? `
+                <div style="display:flex;justify-content:space-between"><span>المجموع الفرعي:</span><span>${Number(data.subTotal).toFixed(2)} ج.م</span></div>
+                <div style="display:flex;justify-content:space-between;color:#22c55e"><span>خصم:</span><span>-${Number(data.discountAmount).toFixed(2)} ج.م</span></div>
+                ` : ''}
+                <div style="display:flex;justify-content:space-between;font-weight:bold;font-size:15px;border-top:1px dashed #333;margin-top:6px;padding-top:6px">
+                <span>إجمالي حساب الطاولة:</span><span>${Number(data.total).toFixed(0)} ج.م</span>
+                </div>
+                ${Number(data.paidTotal) > 0 ? `
+                <div style="display:flex;justify-content:space-between;font-size:11px"><span>مدفوع سابقًا:</span><span>${Number(data.paidTotal).toFixed(0)} ج.م</span></div>` : ''}
+                ${Number(data.outstanding) > 0 ? `
+                <div style="display:flex;justify-content:space-between;font-weight:bold;color:#dc2626"><span>المطلوب تحصيله الآن:</span><span>${Number(data.outstanding).toFixed(0)} ج.م</span></div>` : `
+                <div style="text-align:center;color:#16a34a;font-weight:bold;font-size:11px">✅ الحساب مسدد بالكامل</div>`}
+                <div style="text-align:center;margin-top:6px;font-size:10px">* الأسعار شاملة الضريبة</div>
+                </div>
+                </div>`;
+
+                billMode = true;
+                lastInvoiceHtml = html;
+                document.getElementById('invoicePreview').innerHTML = html;
+                document.getElementById('invoiceModalFooter').innerHTML = `
+                <button class="btn btn-primary" onclick="doPrint()">🖨️ طباعة</button>
+                <button class="btn btn-accent" onclick="closeTable(${data.tableId})">
+                ${Number(data.outstanding) > 0 ? `💵 تحصيل ${Number(data.outstanding).toFixed(0)} ج.م وإغلاق الطاولة` : '✅ إغلاق الطاولة'}
+                </button>
+                `;
+                Modal.open('invoiceModal');
+            } finally { Loading.hide(); }
+        }
+
+        async function closeTable(tableId) {
+            Loading.show();
+            try {
+                const r = await API.post('/Cashier/CloseTable', { tableId, paymentMethod: selectedPayment });
+                if (r.success) {
+                    Toast.success(r.settledCount > 0
+                        ? `تم تحصيل ${Number(r.settledTotal).toFixed(0)} ج.م وإغلاق الطاولة`
+                        : 'تم إغلاق الطاولة');
+                    Modal.close('invoiceModal');
+                    document.getElementById('tableSelect').value = '';
+                    onTableSelected();
+                    await refreshTablesStatus();
+                } else {
+                    Toast.error(r.message || 'تعذر إغلاق الطاولة');
+                }
+            } finally { Loading.hide(); }
+        }
+
+        /* ════════════════════════════════════════════════════
+        الفاتورة
+        ════════════════════════════════════════════════════ */
+        async function showInvoice(orderId) {
+            try {
+                const data = await API.get(`/Cashier/GetOrderForPrint?id=${orderId}&t=${Date.now()}`);
+                if (!data || data.success === false) { Toast.error(data?.message || 'لم يتم العثور على الفاتورة'); return; }
+                const o = data.order || data;
+
+                const typeAr = { DineIn: 'صالة', Takeaway: 'تيك أواي', Delivery: 'توصيل' };
+                const rows = (o.items || []).map(i => `
+                <tr>
+                <td style="text-align:right;direction:rtl;padding:4px">${i.productNameAr || i.productName}</td>
+                <td style="text-align:center;padding:4px">${i.quantity}</td>
+                <td style="text-align:right;padding:4px">${Number(i.unitPrice).toFixed(2)}</td>
+                <td style="text-align:right;padding:4px">${Number(i.totalPrice).toFixed(2)}</td>
+                </tr>`).join('');
+
+                const html = `
+                <div style="font-family:'Cairo',sans-serif;max-width:300px;margin:0 auto;padding:10px;color:#000">
+                <div style="border-bottom:2px dashed #333;padding-bottom:10px;margin-bottom:10px">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                <img src="/logo.jpg" alt="Logo" style="max-width:80px;max-height:80px;object-fit:contain" onerror="this.style.display='none'">
+                <img src="/qrcode.jpeg" alt="QR Code" style="width:75px;height:75px;object-fit:contain">
+                </div>
+                <div style="text-align:center">
+                <h2 style="margin:0;font-size:18px">${ORG_NAME}</h2>
+                <p style="margin:4px 0;font-size:12px">${ORG_NAME_EN}</p>
+                ${PHONE ? `<p style="margin:0;font-size:11px">Tel: ${PHONE}</p>` : ''}
+                ${ADDRESS ? `<p style="margin:0;font-size:11px">${ADDRESS}</p>` : ''}
+                </div>
+                </div>
+                <div style="font-size:12px;margin-bottom:10px;direction:rtl;line-height:1.7">
+                <div>الطلب: <strong>${o.orderNumber}</strong></div>
+                <div>التاريخ: ${new Date(o.createdAt.endsWith('Z') ? o.createdAt : o.createdAt + 'Z').toLocaleString('ar-EG')}</div>
+                <div>النوع: ${typeAr[o.orderType] || o.orderType}</div>
+                <div>الكاشير: ${o.cashier || 'N/A'}</div>
+                ${o.table ? `<div>الطاولة: ${o.table}</div>` : ''}
+                ${o.customerName ? `<div>العميل: ${o.customerName}</div>` : ''}
+                ${o.branchName ? `<div>الفرع: ${o.branchNameAr || o.branchName}</div>` : ''}
+                </div>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;border-top:1px dashed #333;border-bottom:1px dashed #333;direction:rtl">
+                <thead><tr>
+                <th style="text-align:right;padding:4px">الصنف</th>
+                <th style="text-align:center;padding:4px">ك</th>
+                <th style="text-align:right;padding:4px">سعر</th>
+                <th style="text-align:right;padding:4px">إجمالي</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+                </table>
+                <div style="font-size:12px;margin-top:10px;direction:rtl;line-height:1.8">
+                ${o.discountAmount > 0 ? `
+                <div style="display:flex;justify-content:space-between"><span>المجموع الفرعي:</span><span>${Number(o.subTotal).toFixed(2)} ج.م</span></div>
+                <div style="display:flex;justify-content:space-between;color:#22c55e"><span>خصم:</span><span>-${Number(o.discountAmount).toFixed(2)} ج.م</span></div>
+                ` : ''}
+                <div style="display:flex;justify-content:space-between;font-weight:bold;font-size:15px;border-top:1px dashed #333;margin-top:6px;padding-top:6px">
+                <span>الإجمالي:</span><span>${Number(o.total).toFixed(0)} ج.م</span>
+                </div>
+                <div style="display:flex;justify-content:space-between"><span>المدفوع:</span><span>${Number(o.amountPaid).toFixed(0)} ج.م</span></div>
+                <div style="display:flex;justify-content:space-between;font-weight:700;color:#333"><span>الباقي:</span><span>${Number(o.change).toFixed(0)} ج.م</span></div>
+                <div style="text-align:center;margin-top:6px;font-size:10px">* الأسعار شاملة الضريبة</div>
+                </div>
+                <div style="text-align:center;margin-top:16px;font-size:11px;border-top:1px dashed #333;padding-top:10px">
+                <p style="margin:0">${FOOTER}</p>
+                </div>
+                </div>`;
+
+                billMode = false;
+                lastInvoiceHtml = html;
+                document.getElementById('invoicePreview').innerHTML = html;
+                document.getElementById('invoiceModalFooter').innerHTML = `
+                <button class="btn btn-primary" onclick="doPrint()">🖨️ طباعة</button>
+                <button class="btn btn-accent" onclick="newOrderAfterPrint()">طلب جديد ➕</button>
+                `;
+                Modal.open('invoiceModal');
+            } catch (_) { Toast.error('فشل تحميل الفاتورة'); }
+        }
+
+        function doPrint() { printInvoice(lastInvoiceHtml); }
+        // The cart was already emptied the moment the order was confirmed, so this
+        // just closes the receipt and makes sure the screen is in a clean state.
+        function newOrderAfterPrint() { Modal.close('invoiceModal'); resetCart(); }
+
+        /* ════════════════════════════════════════════════════
+        التهيئة
+        ════════════════════════════════════════════════════ */
+        document.addEventListener('DOMContentLoaded', () => {
+            loadProducts();
+            renderCart();
+            const activePay = document.querySelector('.payment-btn.active');
+            if (activePay) setPayment(0, activePay);
+            fetchShiftStatus();
+            setInterval(fetchShiftStatus, 30000);
+            refreshTablesStatus();
+            setInterval(refreshTablesStatus, 10000);
+        });
+    </script>
+}

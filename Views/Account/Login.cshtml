@@ -1,0 +1,149 @@
+@model RestaurantERP.ViewModels.LoginViewModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تسجيل الدخول - نادي دار الطائرات</title>
+<link rel="stylesheet" href="~/css/fonts.css" />
+<link rel="stylesheet" href="~/lib/fontawesome/css/all.min.css" />
+<style>
+:root { --primary: #1a3a5c; --accent: #f59e0b; }
+[data-theme="dark"] { --bg: #0f172a; --card: #1e293b; --text: #f1f5f9; --sub: #94a3b8; --border: #334155; --input: #0f172a; }
+[data-theme="light"] { --bg: #f0f4f8; --card: #fff; --text: #1e293b; --sub: #64748b; --border: #e2e8f0; --input: #f8fafc; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { min-height:100vh; background:var(--bg); font-family:'Cairo', 'Poppins', sans-serif; display:flex; align-items:center; justify-content:center; padding:20px; transition:background 0.3s; }
+.login-wrap { display:grid; grid-template-columns:1fr 1fr; gap:0; max-width:960px; width:100%; border-radius:24px; overflow:hidden; box-shadow:0 24px 80px rgba(0,0,0,0.15); }
+.login-brand { background:linear-gradient(135deg, #1a3a5c 0%, #0f2540 60%, #1a3a5c 100%); padding:60px 48px; display:flex; flex-direction:column; justify-content:center; position:relative; overflow:hidden; }
+.login-brand::before { content:'✈️'; position:absolute; font-size:180px; opacity:0.06; right:-20px; bottom:-20px; }
+.brand-logo { font-size:52px; margin-bottom:20px; }
+.brand-title { color:#fff; font-size:26px; font-weight:900; line-height:1.3; margin-bottom:8px; }
+.brand-sub { color:var(--accent); font-size:14px; font-weight:600; margin-bottom:32px; }
+.brand-features { list-style:none; }
+.brand-features li { color:rgba(255,255,255,0.7); font-size:13px; padding:6px 0; display:flex; align-items:center; gap:10px; }
+.brand-features li::before { content:'✓'; color:var(--accent); font-weight:900; }
+.login-form-wrap { background:var(--card); padding:60px 48px; }
+.form-header { margin-bottom:40px; }
+.form-header h2 { color:var(--text); font-size:24px; font-weight:800; }
+.form-header p { color:var(--sub); font-size:14px; margin-top:6px; }
+.form-group { margin-bottom:20px; }
+.form-label { display:block; color:var(--sub); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:8px; }
+.form-input { width:100%; padding:14px 16px; border:2px solid var(--border); border-radius:12px; background:var(--input); color:var(--text); font-size:15px; font-family:inherit; outline:none; transition:border-color 0.2s, box-shadow 0.2s; }
+.form-input:focus { border-color:#2563a8; box-shadow:0 0 0 4px rgba(37,99,168,0.1); }
+.login-btn { width:100%; padding:16px; background:linear-gradient(135deg, #1a3a5c, #2563a8); color:#fff; border:none; border-radius:12px; font-size:16px; font-weight:700; cursor:pointer; font-family:inherit; transition:all 0.2s; margin-top:8px; display:flex; align-items:center; justify-content:center; gap:8px; }
+.login-btn:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(37,99,168,0.3); }
+.error-msg { background:rgba(239,68,68,0.1); color:#ef4444; border:1px solid rgba(239,68,68,0.2); border-radius:10px; padding:12px 16px; font-size:13px; margin-bottom:20px; }
+.demo-accounts { margin-top:28px; padding:20px; background:var(--input); border-radius:12px; border:1px dashed var(--border); }
+.demo-accounts h4 { font-size:12px; font-weight:700; color:var(--sub); text-transform:uppercase; margin-bottom:12px; }
+.demo-item { display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid var(--border); }
+.demo-item:last-child { border:none; }
+.demo-role { font-size:12px; font-weight:700; color:var(--text); }
+.demo-creds { font-size:11px; color:var(--sub); font-family:monospace; }
+.fill-btn { font-size:10px; background:var(--primary); color:#fff; border:none; border-radius:4px; padding:2px 8px; cursor:pointer; }
+.theme-toggle { position:fixed; top:20px; left:20px; width:40px; height:40px; border-radius:50%; border:none; font-size:18px; cursor:pointer; background:var(--card); box-shadow:0 2px 12px rgba(0,0,0,0.1); transition:all 0.2s; }
+.theme-toggle:hover { transform:scale(1.1); }
+.lang-toggle { position:fixed; top:20px; left:70px; width:60px; height:40px; border-radius:20px; border:none; font-size:12px; font-weight:700; cursor:pointer; background:var(--primary); color:#fff; transition:all 0.2s; }
+@@media (max-width:768px) { .login-wrap { grid-template-columns:1fr; } .login-brand { display:none; } .login-form-wrap { padding:40px 28px; } }
+</style>
+</head>
+<body>
+<button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">🌙</button>
+<button class="lang-toggle" id="langToggle" onclick="toggleLang()">EN</button>
+
+<div class="login-wrap">
+    <div class="login-brand">
+        <div class="brand-logo">✈️</div>
+        <h1 class="brand-title">نادي دار الطائرات</h1>
+        <p class="brand-sub">Aircraft Factory Club • نظام إدارة المطعم</p>
+        <ul class="brand-features">
+            <li id="f1">نظام كاشير متكامل مع الطباعة</li>
+            <li id="f2">لوحة تحكم تفاعلية وتحليلات</li>
+            <li id="f3">إدارة المخزون والمصروفات</li>
+            <li id="f4">دعم اللغة العربية والإنجليزية</li>
+            <li id="f5">الوضع الليلي والنهاري</li>
+            <li id="f6">إدارة أدوار المستخدمين</li>
+        </ul>
+    </div>
+    <div class="login-form-wrap">
+        <div class="form-header">
+            <h2 id="formTitle">تسجيل الدخول</h2>
+            <p id="formSub">أدخل بياناتك للوصول إلى النظام</p>
+        </div>
+
+        @if (!ViewData.ModelState.IsValid)
+        {
+            <div class="error-msg">❌
+                @foreach (var error in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+                {
+                    @error.ErrorMessage
+                }
+            </div>
+        }
+
+        <form method="post" asp-action="Login">
+            @Html.AntiForgeryToken()
+            <div class="form-group">
+                <label class="form-label" id="emailLabel">البريد الإلكتروني</label>
+                <input asp-for="Email" type="email" class="form-input" placeholder="email@example.com" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label" id="passLabel">كلمة المرور</label>
+                <input asp-for="Password" type="password" class="form-input" placeholder="••••••••" required>
+            </div>
+            <button type="submit" class="login-btn">
+                <span>🔐</span> <span id="loginBtnText">دخول إلى النظام</span>
+            </button>
+        </form>
+
+
+    </div>
+</div>
+
+<script>
+let isDark = localStorage.getItem('erp-theme') === 'dark';
+let isEn = localStorage.getItem('erp-lang') === 'en';
+
+function applyTheme() {
+    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+    document.getElementById('themeToggle').textContent = isDark ? '☀️' : '🌙';
+}
+function toggleTheme() { isDark = !isDark; localStorage.setItem('erp-theme', isDark?'dark':'light'); applyTheme(); }
+
+const translations = {
+    ar: { title:'تسجيل الدخول', sub:'أدخل بياناتك للوصول إلى النظام', email:'البريد الإلكتروني', pass:'كلمة المرور', btn:'دخول إلى النظام', demo:'حسابات تجريبية', r1:'👑 مدير النظام', r2:'📊 مدير', r3:'💰 كاشير', r4:'👨‍🍳 مطبخ', f1:'نظام كاشير متكامل مع الطباعة', f2:'لوحة تحكم تفاعلية وتحليلات', f3:'إدارة المخزون والمصروفات', f4:'دعم اللغة العربية والإنجليزية', f5:'الوضع الليلي والنهاري', f6:'إدارة أدوار المستخدمين' },
+    en: { title:'Sign In', sub:'Enter your credentials to access the system', email:'Email Address', pass:'Password', btn:'Login to System', demo:'Demo Accounts', r1:'👑 Admin', r2:'📊 Manager', r3:'💰 Cashier', r4:'👨‍🍳 Kitchen', f1:'Full POS with invoice printing', f2:'Interactive dashboard & analytics', f3:'Inventory & expense management', f4:'Arabic & English bilingual', f5:'Dark & light mode', f6:'Multi-role user management' }
+};
+
+function applyLang() {
+    const lang = isEn ? 'en' : 'ar';
+    const t = translations[lang];
+    document.documentElement.setAttribute('lang', lang);
+    document.documentElement.setAttribute('dir', isEn ? 'ltr' : 'rtl');
+    document.getElementById('langToggle').textContent = isEn ? 'عربي' : 'EN';
+    document.getElementById('formTitle').textContent = t.title;
+    document.getElementById('formSub').textContent = t.sub;
+    document.getElementById('emailLabel').textContent = t.email;
+    document.getElementById('passLabel').textContent = t.pass;
+    document.getElementById('loginBtnText').textContent = t.btn;
+    document.getElementById('demoTitle').textContent = t.demo;
+    ['r1','r2','r3','r4','f1','f2','f3','f4','f5','f6'].forEach(id => {
+        const el = document.getElementById(id);
+        if(el) el.textContent = t[id];
+    });
+}
+
+function toggleLang() { isEn = !isEn; localStorage.setItem('erp-lang', isEn?'en':'ar'); applyLang(); }
+
+function fillCreds(email, pass) {
+    document.querySelector('input[type=email]').value = email;
+    document.querySelector('input[type=password]').value = pass;
+}
+
+applyTheme();
+applyLang();
+</script>
+</body>
+</html>

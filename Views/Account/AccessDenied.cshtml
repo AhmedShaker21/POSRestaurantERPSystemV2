@@ -1,0 +1,33 @@
+@{
+    ViewData["Title"] = "Access Denied";
+    Layout = null;
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Access Denied</title>
+<link rel="stylesheet" href="~/css/fonts.css" />
+    <link href="~/css/main.css" rel="stylesheet">
+    <style>
+        body { display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: var(--bg-primary); }
+        .error-container { text-align: center; padding: 40px; max-width: 500px; }
+        .error-icon { font-size: 80px; color: #FF6B6B; margin-bottom: 24px; }
+        .error-code { font-size: 72px; font-weight: 800; color: var(--text-primary); line-height: 1; }
+        .error-title { font-size: 24px; font-weight: 700; margin: 12px 0 8px; }
+        .error-msg { color: var(--text-muted); margin-bottom: 32px; }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <div class="error-icon"><i class="fas fa-shield-alt"></i></div>
+        <div class="error-code">403</div>
+        <div class="error-title">Access Denied</div>
+        <div class="error-msg">You don't have permission to access this page. Please contact your administrator.</div>
+        <a href="/" class="btn btn-primary"><i class="fas fa-home me-2"></i>Go Home</a>
+        <a href="/Account/Login" class="btn btn-outline" style="margin-left:12px"><i class="fas fa-sign-in-alt me-2"></i>Login</a>
+    </div>
+    <link rel="stylesheet" href="~/lib/fontawesome/css/all.min.css" />
+</body>
+</html>

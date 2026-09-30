@@ -1,0 +1,182 @@
+@model List<RestaurantERP.Models.Supplier>
+@{
+    ViewData["Title"] = "الموردون";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.PageTitle = "الموردون";
+    var isAdmin = (bool)(ViewBag.IsAdmin ?? false);
+    string M(decimal d) => d.ToString("N2");
+}
+
+<div class="page-header no-print">
+    <div>
+        <h1 class="page-title">🚚 الموردون</h1>
+        <p class="page-subtitle">@Model.Count مورد</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline" href="/Inventory/Dashboard">⬅ لوحة المخزن</a>
+        <button class="btn btn-primary" onclick="window.print()">🖨️ طباعة</button>
+        @if (isAdmin)
+        {
+            <button class="btn btn-accent" onclick="openSupplier()">➕ مورد جديد</button>
+        }
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr><th>المورد</th><th>الهاتف</th><th>عدد الإيصالات</th><th>إجمالي التوريدات</th><th>المستحق</th><th>الحالة</th><th class="no-print"></th></tr>
+            </thead>
+            <tbody>
+                @if (!Model.Any())
+                {
+                    <tr><td colspan="7" style="text-align:center;color:var(--text-muted)">لا يوجد موردون بعد</td></tr>
+                }
+                @foreach (var s in Model)
+                {
+                    var total = s.Receipts?.Sum(r => r.TotalCost) ?? 0;
+                    var outstanding = s.Receipts?.Where(r => !r.IsPaid).Sum(r => r.TotalCost - r.AmountPaid) ?? 0;
+                    <tr>
+                        <td>
+                            <div style="font-weight:600">@s.Name</div>
+                            @if (!string.IsNullOrEmpty(s.Address))
+                            {
+                                <div style="font-size:11px;color:var(--text-muted)">@s.Address</div>
+                            }
+                        </td>
+                        <td>@(s.Phone ?? "—")</td>
+                        <td>@(s.Receipts?.Count ?? 0)</td>
+                        <td>@M(total)</td>
+                        <td>
+                            @if (outstanding > 0)
+                            {
+                                <strong style="color:var(--danger)">@M(outstanding)</strong>
+                            }
+                            else
+                            {
+                                <span style="color:var(--text-muted)">—</span>
+                            }
+                        </td>
+                        <td>
+                            @if (s.IsActive)
+                            {
+                                <span class="badge" style="background:#4CAF5022;color:#4CAF50">نشط</span>
+                            }
+                            else
+                            {
+                                <span class="badge" style="background:#9E9E9E22;color:#9E9E9E">موقوف</span>
+                            }
+                        </td>
+                        <td class="no-print" style="white-space:nowrap">
+                            <a class="btn btn-sm btn-outline" href="/Inventory/Receipts?supplierId=@s.Id&from=2000-01-01">الإيصالات</a>
+                            @if (isAdmin)
+                            {
+                                <button class="btn btn-sm btn-outline"
+                                        onclick='editSupplier(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(new { id = s.Id, name = s.Name, phone = s.Phone, address = s.Address, notes = s.Notes, isActive = s.IsActive })))'>تعديل</button>
+                                <button class="btn btn-sm btn-outline" onclick="deleteSupplier(@s.Id)">🗑️</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@if (isAdmin)
+{
+    <div class="modal-overlay" id="supplierModal">
+        <div class="modal" style="max-width:420px">
+            <div class="modal-header">
+                <h3 class="modal-title" id="spTitle">➕ مورد جديد</h3>
+                <button class="modal-close" onclick="Modal.close('supplierModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="spId" value="0">
+                <div class="form-group">
+                    <label class="form-label">اسم المورد *</label>
+                    <input type="text" id="spName" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">الهاتف</label>
+                    <input type="text" id="spPhone" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">العنوان</label>
+                    <input type="text" id="spAddress" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">ملاحظات</label>
+                    <textarea id="spNotes" class="form-control" rows="2"></textarea>
+                </div>
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <input type="checkbox" id="spActive" checked style="width:18px;height:18px">
+                    <span>نشط</span>
+                </label>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="Modal.close('supplierModal')">إلغاء</button>
+                <button class="btn btn-primary" onclick="saveSupplier()">💾 حفظ</button>
+            </div>
+        </div>
+    </div>
+}
+
+@section Scripts {
+<script>
+/* NOTE: these helpers are always defined and are NOT wrapped in a Razor
+   markup block. Inside such a block Razor treats the script as markup, so
+   the '&lt;' and '&lt;=' operators in JavaScript make it try to parse a tag
+   and fail with RZ1024. The admin-only UI is still gated in the markup above,
+   and every endpoint is [Authorize(Roles="Admin")] server-side. */
+function openSupplier() {
+    document.getElementById('spTitle').textContent = '➕ مورد جديد';
+    document.getElementById('spId').value = 0;
+    ['spName','spPhone','spAddress','spNotes'].forEach(i => document.getElementById(i).value = '');
+    document.getElementById('spActive').checked = true;
+    Modal.open('supplierModal');
+}
+
+function editSupplier(s) {
+    document.getElementById('spTitle').textContent = '✏️ تعديل مورد';
+    document.getElementById('spId').value = s.id;
+    document.getElementById('spName').value = s.name || '';
+    document.getElementById('spPhone').value = s.phone || '';
+    document.getElementById('spAddress').value = s.address || '';
+    document.getElementById('spNotes').value = s.notes || '';
+    document.getElementById('spActive').checked = !!s.isActive;
+    Modal.open('supplierModal');
+}
+
+async function saveSupplier() {
+    const name = document.getElementById('spName').value.trim();
+    if (!name) { Toast.error('اسم المورد مطلوب'); return; }
+    Loading.show();
+    try {
+        const r = await API.post('/Inventory/SaveSupplier', {
+            id: parseInt(document.getElementById('spId').value) || 0,
+            name,
+            phone: document.getElementById('spPhone').value || null,
+            address: document.getElementById('spAddress').value || null,
+            notes: document.getElementById('spNotes').value || null,
+            isActive: document.getElementById('spActive').checked
+        });
+        if (r.success) { Toast.success('تم الحفظ'); setTimeout(() => location.reload(), 700); }
+        else Toast.error(r.message || 'حدث خطأ');
+    } finally { Loading.hide(); }
+}
+
+async function deleteSupplier(id) {
+    if (!confirm('متأكد من حذف هذا المورد؟')) return;
+    Loading.show();
+    try {
+        const r = await API.post('/Inventory/DeleteSupplier', { id });
+        if (r.success) {
+            Toast.success(r.deactivated ? 'تم إيقاف المورد (له إيصالات سابقة)' : 'تم الحذف');
+            setTimeout(() => location.reload(), 700);
+        } else Toast.error(r.message || 'حدث خطأ');
+    } finally { Loading.hide(); }
+}
+</script>
+}

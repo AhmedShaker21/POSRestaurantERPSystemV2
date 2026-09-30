@@ -1,0 +1,198 @@
+@model IEnumerable<RestaurantERP.Models.Product>
+@{
+    ViewData["Title"] = "Inventory";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var tracked = Model.Where(p => p.TrackStock).ToList();
+    var lowStock = tracked.Where(p => p.StockQuantity <= 10).ToList();
+    var outOfStock = tracked.Where(p => p.StockQuantity <= 0).ToList();
+}
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title" data-t="inventory">Inventory</h1>
+        <p class="page-subtitle">@tracked.Count <span data-t="trackedItems">tracked items</span></p>
+    </div>
+</div>
+
+@if (lowStock.Any())
+{
+    <div style="padding:14px 20px;background:#FF980022;border:1px solid #FF9800;border-radius:12px;color:#FF9800;display:flex;align-items:center;gap:12px;margin-bottom:20px">
+        <i class="fas fa-exclamation-triangle fa-lg"></i>
+        <span><strong>@lowStock.Count</strong> items are low on stock (≤10 units)</span>
+    </div>
+}
+
+<div class="stats-grid" style="margin-bottom:24px">
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#45B7D122;color:#45B7D1"><i class="fas fa-boxes"></i></div>
+        <div class="stat-value">@tracked.Count</div>
+        <div class="stat-label" data-t="trackedProducts">Tracked Products</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#4CAF5022;color:#4CAF50"><i class="fas fa-check-circle"></i></div>
+        <div class="stat-value">@(tracked.Count - lowStock.Count)</div>
+        <div class="stat-label" data-t="inStock">In Stock</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#FF980022;color:#FF9800"><i class="fas fa-exclamation-triangle"></i></div>
+        <div class="stat-value">@lowStock.Count</div>
+        <div class="stat-label" data-t="lowStock">Low Stock</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background:#FF6B6B22;color:#FF6B6B"><i class="fas fa-times-circle"></i></div>
+        <div class="stat-value">@outOfStock.Count</div>
+        <div class="stat-label" data-t="outOfStock">Out of Stock</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <div class="d-flex gap-3 align-items-center">
+            <input type="text" class="form-control" style="max-width:220px" placeholder="Search products..." oninput="filterInventory(this.value)">
+            <select id="stockFilter" class="form-control" style="max-width:180px" onchange="filterInventory('')">
+                <option value="">All Stock Levels</option>
+                <option value="low">Low Stock (≤10)</option>
+                <option value="out">Out of Stock</option>
+                <option value="ok">In Stock</option>
+            </select>
+        </div>
+    </div>
+    <div class="table-container">
+        <table class="data-table" id="inventoryTable">
+            <thead>
+                <tr>
+                    <th data-t="product">Product</th>
+                    <th data-t="category">Category</th>
+                    <th data-t="currentStock">Current Stock</th>
+                    <th data-t="stockLevel">Stock Level</th>
+                    <th data-t="status">Status</th>
+                    <th data-t="actions">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var p in tracked.OrderBy(p => p.StockQuantity))
+                {
+                    var stockLevel = p.StockQuantity <= 0 ? "out" : p.StockQuantity <= 10 ? "low" : "ok";
+                    var stockColor = p.StockQuantity <= 0 ? "#FF6B6B" : p.StockQuantity <= 10 ? "#FF9800" : "#4CAF50";
+                    var maxStock = 100;
+                    var pct = Math.Min(100, ((double)p.StockQuantity / maxStock) * 100);
+                    <tr data-stock="@stockLevel">
+                        <td>
+                            <div style="font-weight:600">@p.Name</div>
+                            <div style="font-size:12px;color:var(--text-muted)" dir="rtl">@p.NameAr</div>
+                        </td>
+                        <td>
+                            <span class="badge badge-primary">@(p.Category?.Name ?? "Uncategorized")</span>
+                        </td>
+                        <td>
+                            <span style="font-size:20px;font-weight:700;color:@stockColor">@p.StockQuantity</span>
+                            <span style="font-size:12px;color:var(--text-muted)"> units</span>
+                        </td>
+                        <td style="min-width:150px">
+                            <div style="background:var(--bg-secondary);border-radius:6px;height:8px;overflow:hidden">
+                                <div style="width:@pct%;background:@stockColor;height:100%;border-radius:6px;transition:width 0.3s"></div>
+                            </div>
+                            <div style="font-size:11px;color:var(--text-muted);margin-top:2px">@pct.ToString("F0")% capacity</div>
+                        </td>
+                        <td>
+                            <span class="badge" style="background:@(stockColor)22;color:@stockColor">
+                                @(stockLevel == "out" ? "Out of Stock" : stockLevel == "low" ? "Low Stock" : "In Stock")
+                            </span>
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline" onclick="openStockModal(@p.Id, '@p.Name', @p.StockQuantity)">
+                                <i class="fas fa-edit me-1"></i>Update
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Update Stock Modal -->
+<div class="modal-overlay" id="stockModal">
+    <div class="modal" style="max-width:400px">
+        <div class="modal-header">
+            <h3 class="modal-title" data-t="updateStock">Update Stock</h3>
+            <button class="modal-close" onclick="Modal.close('stockModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p id="stockProductName" style="font-weight:600;font-size:16px;margin-bottom:16px"></p>
+            <input type="hidden" id="stockProductId">
+            <div class="form-group">
+                <label class="form-label" data-t="currentStock">Current Stock</label>
+                <input type="number" id="currentStockDisplay" class="form-control" disabled style="opacity:0.6">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Adjustment Type</label>
+                <div class="d-flex gap-3" style="margin-bottom:8px">
+                    <label style="cursor:pointer;display:flex;align-items:center;gap:6px">
+                        <input type="radio" name="adjType" value="set" id="typeSet" checked> Set to
+                    </label>
+                    <label style="cursor:pointer;display:flex;align-items:center;gap:6px">
+                        <input type="radio" name="adjType" value="add"> Add
+                    </label>
+                    <label style="cursor:pointer;display:flex;align-items:center;gap:6px">
+                        <input type="radio" name="adjType" value="subtract"> Subtract
+                    </label>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label" data-t="quantity">Quantity</label>
+                <input type="number" id="stockQty" class="form-control" placeholder="Enter quantity" min="0">
+            </div>
+            <div class="form-group">
+                <label class="form-label" data-t="reason">Reason</label>
+                <select id="stockReason" class="form-control">
+                    <option>Restock</option>
+                    <option>Manual Adjustment</option>
+                    <option>Waste/Spoilage</option>
+                    <option>Inventory Count</option>
+                    <option>Return</option>
+                </select>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="Modal.close('stockModal')" data-t="cancel">Cancel</button>
+            <button class="btn btn-primary" onclick="saveStockUpdate()">
+                <i class="fas fa-save me-2"></i><span data-t="update">Update Stock</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+function filterInventory(search) {
+    const s = (search || document.querySelector('input[type=text]').value).toLowerCase();
+    const level = document.getElementById('stockFilter').value;
+    document.querySelectorAll('#inventoryTable tbody tr').forEach(row => {
+        row.style.display = (!s || row.textContent.toLowerCase().includes(s)) && (!level || row.dataset.stock === level) ? '' : 'none';
+    });
+}
+
+function openStockModal(id, name, current) {
+    document.getElementById('stockProductId').value = id;
+    document.getElementById('stockProductName').textContent = name;
+    document.getElementById('currentStockDisplay').value = current;
+    document.getElementById('stockQty').value = '';
+    Modal.open('stockModal');
+}
+
+async function saveStockUpdate() {
+    const id = parseInt(document.getElementById('stockProductId').value);
+    const qty = parseInt(document.getElementById('stockQty').value) || 0;
+    const type = document.querySelector('input[name=adjType]:checked').value;
+    const reason = document.getElementById('stockReason').value;
+    const current = parseInt(document.getElementById('currentStockDisplay').value) || 0;
+    let newQty = type === 'set' ? qty : type === 'add' ? current + qty : Math.max(0, current - qty);
+    try {
+        const res = await API.post('/Admin/UpdateStock', { productId: id, quantity: newQty, reason });
+        if (res.success) { Toast.success('Stock updated successfully'); setTimeout(() => location.reload(), 600); }
+        else Toast.error(res.message || 'Failed');
+    } catch(e) { Toast.error('Error updating stock'); }
+}
+</script>
+}
